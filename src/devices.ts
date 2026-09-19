@@ -172,11 +172,3 @@ export function createDevice(
   }
   return device;
 }
-
-export function isRouterConfig(config: unknown): config is RouterConfig {
-  return !!config && typeof config === "object" && "lanIp" in config;
-}
-
-export function isClientConfig(config: unknown): config is ClientConfig {
-  return !!config && typeof config === "object" && "dhcpEnabled" in config && !("lanIp" in config);
-}

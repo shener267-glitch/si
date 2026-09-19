@@ -1,5 +1,6 @@
 import { CABLE_MAX_METERS, cableLengthMeters, isCableTooLong } from "./cables";
 import {
+  findConnectionBetween,
   findL2Domain,
   isValidIp,
   resolveAllConfigs,
@@ -90,9 +91,17 @@ export function diagnoseDevice(state: GameState, deviceId: string): DeviceDiagno
   }
   steps.push(ok("physical"));
 
-  const path = shortestPathDevices(state, device.id, domain.router.id) ?? [device, domain.router];
+  // Power and cable-length checks need the *full* physical route all the way to the
+  // Internet node (including the router's WAN-side hop through the ONU), not just the
+  // LAN-side hop to the router - otherwise turning off the ONU, or an over-length WAN
+  // cable, would go undetected. Falls back to the LAN-only path if the WAN side isn't
+  // wired yet; the later "route" step catches that case on its own.
+  const path =
+    shortestPathDevices(state, device.id, internetDeviceId()) ??
+    shortestPathDevices(state, device.id, domain.router.id) ??
+    [device, domain.router];
 
-  // 2. power along the path to the router (the passive jack/patch-panel hops have no power field)
+  // 2. power along the path to the Internet (the passive jack/patch-panel hops have no power field)
   const unpoweredHop = path.find((d) => d.id !== device.id && d.power === "off");
   if (unpoweredHop) {
     steps.push(fail("power", `${unpoweredHop.name}の電源が入っていません。`));
@@ -123,11 +132,15 @@ export function diagnoseDevice(state: GameState, deviceId: string): DeviceDiagno
   }
   steps.push(ok("cable"));
 
-  // 4. port status along the direct link
-  const myDownLink = connectionsOf(state, device.id)[0];
-  const myPort = device.ports.find(
-    (p) => p.id === myDownLink.fromPort || p.id === myDownLink.toPort
-  );
+  // 4. port status on the hop the path above actually uses (a device with two links,
+  // e.g. Ethernet + Wi-Fi, could otherwise have its unrelated idle link checked instead).
+  const myDownLink =
+    path.length > 1
+      ? findConnectionBetween(state, device.id, path[1].id)
+      : connectionsOf(state, device.id)[0];
+  const myPort = myDownLink
+    ? device.ports.find((p) => p.id === myDownLink.fromPort || p.id === myDownLink.toPort)
+    : undefined;
   if (myPort && myPort.status === "down") {
     steps.push(fail("port", `${device.name}のポートが無効になっています。`));
     return finish(3);
