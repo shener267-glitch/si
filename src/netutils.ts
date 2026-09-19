@@ -1,4 +1,5 @@
 import { deviceById, neighborsOf } from "./state";
+import { isComputerType } from "./types";
 import type { ClientConfig, Connection, Device, GameState, RouterConfig } from "./types";
 
 export function ipToInt(ip: string | undefined): number | null {
@@ -74,7 +75,7 @@ export function domainClientsOfRouter(state: GameState, routerId: string): Devic
       if (neighbor.type === "router" || neighbor.type === "onu" || neighbor.type === "internet") {
         continue;
       }
-      if (neighbor.type === "pc" || neighbor.type === "server") clients.push(neighbor);
+      if (isComputerType(neighbor.type) || neighbor.type === "server") clients.push(neighbor);
       queue.push(neighbor.id);
     }
   }
@@ -145,7 +146,7 @@ export interface ResolvedConfig {
 export function resolveAllConfigs(state: GameState): Map<string, ResolvedConfig> {
   const result = new Map<string, ResolvedConfig>();
   const clients = state.devices.filter(
-    (d) => (d.type === "pc" || d.type === "server") && d.x !== null
+    (d) => (isComputerType(d.type) || d.type === "server") && d.x !== null
   );
   const routers = state.devices.filter((d) => d.type === "router" && d.x !== null);
 

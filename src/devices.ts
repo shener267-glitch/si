@@ -1,26 +1,51 @@
+import { isComputerType } from "./types";
 import type { ClientConfig, Device, DeviceCatalogItem, DeviceType, RouterConfig } from "./types";
 
 // Shop catalog. Ports are templates (capacity/type only); real Port objects
 // with unique ids get stamped out per-device in createDevice().
 export const DEVICE_CATALOG: DeviceCatalogItem[] = [
   {
-    type: "pc",
-    label: "PC",
+    type: "desktop_pc",
+    category: "computer",
+    label: "デスクトップPC",
     price: 100_000,
+    icon: "🖥️",
+    description: "社員が使う据え置き型の端末。有線LANのみで接続する。",
+    ports: [{ type: "ETHERNET" }],
+    specs: { CPU: "標準", メモリ: "8GB", 接続: "有線LANのみ", 用途: "一般事務" },
+  },
+  {
+    type: "notebook_pc",
+    category: "computer",
+    label: "ノートPC",
+    price: 120_000,
     icon: "💻",
-    description: "社員が使う端末。有線でもWi-Fiでも接続できる。",
-    ports: [{ type: "ETHERNET" }, { type: "WIFI" }],
+    description: "持ち運べる端末。バッテリーを内蔵し、Wi-Fiのみで接続する。",
+    ports: [{ type: "WIFI" }],
+    specs: { CPU: "標準", メモリ: "8GB", 接続: "Wi-Fiのみ", 用途: "外出先・会議室" },
+  },
+  {
+    type: "workstation",
+    category: "computer",
+    label: "ワークステーション",
+    price: 350_000,
+    icon: "🖲️",
+    description: "CADや設計など重い処理向けの高性能端末。有線LANのみで接続する。",
+    ports: [{ type: "ETHERNET" }],
+    specs: { CPU: "高性能", メモリ: "32GB", 接続: "有線LANのみ", 用途: "CAD・設計・重い処理" },
   },
   {
     type: "server",
+    category: "server",
     label: "サーバー",
     price: 200_000,
-    icon: "🖥️",
+    icon: "🗄️",
     description: "社内サービスを提供する。固定IPを設定することが多い。",
     ports: [{ type: "ETHERNET" }],
   },
   {
     type: "router",
+    category: "network",
     label: "ルーター",
     price: 80_000,
     icon: "🌐",
@@ -35,6 +60,7 @@ export const DEVICE_CATALOG: DeviceCatalogItem[] = [
   },
   {
     type: "switch4",
+    category: "network",
     label: "スイッチ（4ポート）",
     price: 50_000,
     icon: "🔀",
@@ -43,6 +69,7 @@ export const DEVICE_CATALOG: DeviceCatalogItem[] = [
   },
   {
     type: "switch8",
+    category: "network",
     label: "スイッチ（8ポート）",
     price: 80_000,
     icon: "🔀",
@@ -51,6 +78,7 @@ export const DEVICE_CATALOG: DeviceCatalogItem[] = [
   },
   {
     type: "onu",
+    category: "network",
     label: "ONU（回線終端装置）",
     price: 40_000,
     icon: "📶",
@@ -59,6 +87,7 @@ export const DEVICE_CATALOG: DeviceCatalogItem[] = [
   },
   {
     type: "wifi",
+    category: "network",
     label: "Wi-Fiアクセスポイント",
     price: 30_000,
     icon: "📡",
@@ -67,6 +96,7 @@ export const DEVICE_CATALOG: DeviceCatalogItem[] = [
   },
   {
     type: "lan_jack",
+    category: "wiring",
     label: "LANコンセント",
     price: 5_000,
     icon: "🔌",
@@ -75,6 +105,7 @@ export const DEVICE_CATALOG: DeviceCatalogItem[] = [
   },
   {
     type: "patch_panel",
+    category: "wiring",
     label: "パッチパネル",
     price: 40_000,
     icon: "🗄️",
@@ -83,6 +114,7 @@ export const DEVICE_CATALOG: DeviceCatalogItem[] = [
   },
   {
     type: "rack",
+    category: "wiring",
     label: "通信ラック",
     price: 60_000,
     icon: "🗃️",
@@ -90,6 +122,15 @@ export const DEVICE_CATALOG: DeviceCatalogItem[] = [
     ports: [],
   },
 ];
+
+export const CATEGORY_LABELS: Record<DeviceCatalogItem["category"], string> = {
+  computer: "コンピューター",
+  server: "サーバー",
+  network: "ネットワーク機器",
+  wiring: "配線・什器",
+};
+
+export const CATEGORY_ORDER: DeviceCatalogItem["category"][] = ["computer", "server", "network", "wiring"];
 
 export const INTERNET_ICON = "☁️";
 
@@ -101,8 +142,12 @@ export function catalogItem(type: DeviceType): DeviceCatalogItem {
 
 export function shortLabel(type: DeviceType): string {
   switch (type) {
-    case "pc":
+    case "desktop_pc":
       return "PC";
+    case "notebook_pc":
+      return "Note";
+    case "workstation":
+      return "WS";
     case "server":
       return "Server";
     case "router":
@@ -144,7 +189,7 @@ function defaultRouterConfig(): RouterConfig {
 }
 
 function defaultClientConfig(type: DeviceType): ClientConfig {
-  // Servers conventionally get a static IP; PCs default to DHCP.
+  // Servers conventionally get a static IP; computers default to DHCP.
   return { dhcpEnabled: type !== "server" };
 }
 
@@ -174,7 +219,7 @@ export function createDevice(
   };
   if (type === "router") {
     device.networkConfig = defaultRouterConfig();
-  } else if (type === "pc" || type === "server") {
+  } else if (isComputerType(type) || type === "server") {
     device.networkConfig = defaultClientConfig(type);
   }
   if (POWERED_TYPES.includes(type)) {

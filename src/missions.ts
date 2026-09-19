@@ -1,11 +1,12 @@
 import { diagnoseDevice } from "./diagnostics";
 import { findL2Domain, resolveAllConfigs, shortestPathDevices } from "./netutils";
 import { connectionsOf } from "./state";
+import { isComputerType } from "./types";
 import type { ClientConfig, GameState, Mission } from "./types";
 
-function onlinePcCount(state: GameState): number {
+function onlineComputerCount(state: GameState): number {
   return state.devices.filter(
-    (d) => d.type === "pc" && d.x !== null && diagnoseDevice(state, d.id).success
+    (d) => isComputerType(d.type) && d.x !== null && diagnoseDevice(state, d.id).success
   ).length;
 }
 
@@ -29,7 +30,7 @@ export const MISSIONS: Mission[] = [
     budgetHint: "予算目安：¥300,000",
     requirements: ["PCを1台、インターネットに接続できるようにしてください。"],
     check: (state) => {
-      const online = onlinePcCount(state);
+      const online = onlineComputerCount(state);
       return online >= 1
         ? { ok: true }
         : { ok: false, detail: "PCがまだインターネットに接続できていません。" };
@@ -48,7 +49,7 @@ export const MISSIONS: Mission[] = [
       "全員が同時にインターネットへ接続できる必要があります。",
     ],
     check: (state) => {
-      const online = onlinePcCount(state);
+      const online = onlineComputerCount(state);
       return online >= 5
         ? { ok: true }
         : { ok: false, detail: `インターネットに接続できているPC：${online} / 5` };
@@ -65,7 +66,7 @@ export const MISSIONS: Mission[] = [
     requirements: ["特定の1台には固定のIPアドレスを割り当ててください（社内システムの都合です）。"],
     check: (state) => {
       const manualOnline = state.devices.some((d) => {
-        if (d.type !== "pc" || d.x === null) return false;
+        if (!isComputerType(d.type) || d.x === null) return false;
         const cfg = d.networkConfig as ClientConfig | undefined;
         if (!cfg || cfg.dhcpEnabled) return false;
         return diagnoseDevice(state, d.id).success;
@@ -88,7 +89,7 @@ export const MISSIONS: Mission[] = [
       "原因を調査し、復旧してください。",
     ],
     onActivate: (state) => {
-      const pcs = state.devices.filter((d) => d.type === "pc" && d.x !== null);
+      const pcs = state.devices.filter((d) => isComputerType(d.type) && d.x !== null);
       if (pcs.length === 0) return;
       const resolved = resolveAllConfigs(state);
       const target =
@@ -104,7 +105,7 @@ export const MISSIONS: Mission[] = [
     },
     check: (state) => {
       const touched = state.devices.filter(
-        (d) => (d.type === "pc" || d.type === "server") && d.x !== null && connectionsOf(state, d.id).length > 0
+        (d) => (isComputerType(d.type) || d.type === "server") && d.x !== null && connectionsOf(state, d.id).length > 0
       );
       const allOnline = touched.length > 0 && touched.every((d) => diagnoseDevice(state, d.id).success);
       return allOnline
@@ -147,7 +148,7 @@ export const MISSIONS: Mission[] = [
     ],
     check: (state) => {
       const wired = state.devices.some((d) => {
-        if ((d.type !== "pc" && d.type !== "server") || d.x === null) return false;
+        if ((!isComputerType(d.type) && d.type !== "server") || d.x === null) return false;
         if (!diagnoseDevice(state, d.id).success) return false;
         const domain = findL2Domain(state, d.id);
         if (!domain.router) return false;
@@ -176,7 +177,7 @@ export const MISSIONS: Mission[] = [
       const warehouse = state.rooms.find((r) => r.id === "warehouse");
       if (!warehouse) return { ok: false, detail: "倉庫が見つかりません。" };
       const online = state.devices.some((d) => {
-        if ((d.type !== "pc" && d.type !== "server") || d.x === null || d.y === null) return false;
+        if ((!isComputerType(d.type) && d.type !== "server") || d.x === null || d.y === null) return false;
         const inWarehouse =
           d.x >= warehouse.x &&
           d.x <= warehouse.x + warehouse.width &&
@@ -204,13 +205,34 @@ export const MISSIONS: Mission[] = [
     ],
     check: (state) => {
       const wifiOnline = state.devices.some((d) => {
-        if ((d.type !== "pc" && d.type !== "server") || d.x === null) return false;
+        if ((!isComputerType(d.type) && d.type !== "server") || d.x === null) return false;
         if (!diagnoseDevice(state, d.id).success) return false;
         return connectionsOf(state, d.id).some((c) => c.kind === "wifi");
       });
       return wifiOnline
         ? { ok: true }
         : { ok: false, detail: "Wi-Fi接続で正常に通信できているPC・サーバーがまだありません。" };
+    },
+  },
+  {
+    id: "m9",
+    title: "案件09",
+    description: "設計部にワークステーションを導入し、正しく通信できるようにせよ",
+    reward: 250_000,
+    client: "あおぞら商事株式会社 設計部",
+    deadline: "納期：4日後",
+    budgetHint: "予算目安：¥450,000",
+    requirements: [
+      "CADソフトを動かすため、通常のPCではなくワークステーションを導入してください。",
+      "ワークステーションがインターネット（社内システム）に接続できることを確認してください。",
+    ],
+    check: (state) => {
+      const online = state.devices.some(
+        (d) => d.type === "workstation" && d.x !== null && diagnoseDevice(state, d.id).success
+      );
+      return online
+        ? { ok: true }
+        : { ok: false, detail: "通信できているワークステーションがまだありません。" };
     },
   },
 ];

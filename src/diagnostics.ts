@@ -9,6 +9,7 @@ import {
   shortestPathDevices,
 } from "./netutils";
 import { connectionsOf, internetDeviceId } from "./state";
+import { isComputerType } from "./types";
 import type {
   ClientConfig,
   DeviceDiagnosis,
@@ -225,7 +226,7 @@ export function diagnoseDevice(state: GameState, deviceId: string): DeviceDiagno
 
 export function runCommunicationTest(state: GameState): DeviceDiagnosis[] {
   return state.devices
-    .filter((d) => (d.type === "pc" || d.type === "server") && d.x !== null)
+    .filter((d) => (isComputerType(d.type) || d.type === "server") && d.x !== null)
     .map((d) => diagnoseDevice(state, d.id));
 }
 

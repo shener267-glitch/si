@@ -415,6 +415,61 @@ body {
   color: var(--text-dim);
 }
 
+.shop-category-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dim);
+  margin: 14px 4px 4px;
+}
+
+.shop-category:first-of-type .shop-category-title {
+  margin-top: 4px;
+}
+
+.shop-item-compare.field--checkbox {
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.shop-item-compare input {
+  margin: 0;
+}
+
+.compare-fab {
+  position: sticky;
+  bottom: 0;
+  width: 100%;
+  background: var(--accent);
+  color: #06222f;
+  font-weight: 700;
+  border: none;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 13px;
+  margin-top: 10px;
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.compare-table th,
+.compare-table td {
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.compare-table thead th {
+  color: var(--accent-2);
+}
+
 /* test */
 .test-summary {
   font-size: 13px;

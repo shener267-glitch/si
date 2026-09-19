@@ -1,6 +1,6 @@
 import { BOOK_CATEGORIES, findBookPage } from "./book";
 import { cableLengthMeters, isCableTooLong } from "./cables";
-import { DEVICE_CATALOG, iconFor, shortLabel } from "./devices";
+import { CATEGORY_LABELS, CATEGORY_ORDER, DEVICE_CATALOG, iconFor, shortLabel } from "./devices";
 import { diagnoseDevice, ping, runCommunicationTest } from "./diagnostics";
 import { currentMission, MISSIONS } from "./missions";
 import { isValidIp, resolveAllConfigs } from "./netutils";
@@ -21,6 +21,7 @@ import {
   updateClientConfig,
   updateRouterConfig,
 } from "./state";
+import { isComputerType } from "./types";
 import type {
   ClientConfig,
   Device,
@@ -41,6 +42,8 @@ interface UiState {
   showInspection: boolean;
   showBook: boolean;
   showJobLetter: boolean;
+  showCompare: boolean;
+  compareSelection: DeviceType[];
   settingsDeviceId: string | null;
   diagnosisDeviceId: string | null;
   inspectionDeviceId: string | null;
@@ -62,6 +65,8 @@ function initialUi(): UiState {
     showInspection: false,
     showBook: false,
     showJobLetter: false,
+    showCompare: false,
+    compareSelection: [],
     settingsDeviceId: null,
     diagnosisDeviceId: null,
     inspectionDeviceId: null,
@@ -131,6 +136,19 @@ export class App {
     this.render();
   }
 
+  private handleToggleCompare(type: DeviceType) {
+    const sel = this.ui.compareSelection;
+    const idx = sel.indexOf(type);
+    if (idx >= 0) sel.splice(idx, 1);
+    else sel.push(type);
+    this.render();
+  }
+
+  private handleOpenCompare() {
+    this.ui.showCompare = true;
+    this.render();
+  }
+
   private handleSelectUnplaced(id: string) {
     this.state.mode = "placing";
     this.state.selectedDeviceId = this.state.selectedDeviceId === id ? null : id;
@@ -139,7 +157,9 @@ export class App {
 
   private static readonly SETTINGS_TYPES: DeviceType[] = [
     "router",
-    "pc",
+    "desktop_pc",
+    "notebook_pc",
+    "workstation",
     "server",
     "switch4",
     "switch8",
@@ -161,7 +181,7 @@ export class App {
       return;
     }
     if (this.state.mode === "diagnosing") {
-      if (device.type === "pc" || device.type === "server") {
+      if (isComputerType(device.type) || device.type === "server") {
         this.ui.diagnosisDeviceId = device.id;
         this.ui.showDiagnosis = true;
         this.ui.pingResult = null;
@@ -456,27 +476,80 @@ export class App {
 
   private renderShop(): string {
     if (!this.ui.showShop) return "";
+    const sel = this.ui.compareSelection;
     return `<div class="overlay" data-overlay="shop">
       <div class="sheet">
         <div class="sheet-header">
           <h2>🛒 機器ショップ</h2>
           <button class="close-btn" data-close="shop">✕</button>
         </div>
-        <div class="shop-list">
-          ${DEVICE_CATALOG.map(
-            (item) => `<div class="shop-item">
-              <div class="shop-item-icon">${item.icon}</div>
-              <div class="shop-item-info">
-                <div class="shop-item-name">${item.label}</div>
-                <div class="shop-item-desc">${item.description}</div>
-                <div class="shop-item-price">${money(item.price)}</div>
-              </div>
-              <button class="buy-btn" data-buy="${item.type}" ${
-                this.state.money < item.price ? "disabled" : ""
-              }>購入</button>
-            </div>`
-          ).join("")}
-        </div>
+        ${CATEGORY_ORDER.map((cat) => {
+          const items = DEVICE_CATALOG.filter((i) => i.category === cat);
+          if (items.length === 0) return "";
+          return `<div class="shop-category">
+            <div class="shop-category-title">${CATEGORY_LABELS[cat]}</div>
+            <div class="shop-list">
+              ${items
+                .map(
+                  (item) => `<div class="shop-item">
+                    <label class="field field--checkbox shop-item-compare">
+                      <input type="checkbox" data-compare-toggle="${item.type}" ${
+                        sel.includes(item.type) ? "checked" : ""
+                      } />
+                      <span>比較</span>
+                    </label>
+                    <div class="shop-item-icon">${item.icon}</div>
+                    <div class="shop-item-info">
+                      <div class="shop-item-name">${item.label}</div>
+                      <div class="shop-item-desc">${item.description}</div>
+                      <div class="shop-item-price">${money(item.price)}</div>
+                    </div>
+                    <button class="buy-btn" data-buy="${item.type}" ${
+                      this.state.money < item.price ? "disabled" : ""
+                    }>購入</button>
+                  </div>`
+                )
+                .join("")}
+            </div>
+          </div>`;
+        }).join("")}
+        ${
+          sel.length >= 2
+            ? `<button class="compare-fab" data-open-compare="1">📊 選択した${sel.length}件を比較する</button>`
+            : ""
+        }
+      </div>
+    </div>`;
+  }
+
+  private renderCompare(): string {
+    if (!this.ui.showCompare) return "";
+    const items = this.ui.compareSelection
+      .map((t) => DEVICE_CATALOG.find((i) => i.type === t))
+      .filter((i): i is (typeof DEVICE_CATALOG)[number] => !!i);
+    if (items.length === 0) return "";
+    const specKeys = Array.from(new Set(items.flatMap((i) => Object.keys(i.specs ?? {}))));
+    const rows: Array<{ label: string; values: string[] }> = [
+      { label: "価格", values: items.map((i) => money(i.price)) },
+      { label: "ポート", values: items.map((i) => i.ports.map((p) => p.type).join(" / ") || "なし") },
+      ...specKeys.map((key) => ({ label: key, values: items.map((i) => i.specs?.[key] ?? "-") })),
+    ];
+    return `<div class="overlay" data-overlay="compare">
+      <div class="sheet">
+        <div class="sheet-header"><h2>📊 機器の比較</h2><button class="close-btn" data-close="compare">✕</button></div>
+        <table class="compare-table">
+          <thead>
+            <tr><th></th>${items.map((i) => `<th>${i.icon} ${i.label}</th>`).join("")}</tr>
+          </thead>
+          <tbody>
+            ${rows
+              .map(
+                (row) =>
+                  `<tr><th>${row.label}</th>${row.values.map((v) => `<td>${v}</td>`).join("")}</tr>`
+              )
+              .join("")}
+          </tbody>
+        </table>
       </div>
     </div>`;
   }
@@ -908,6 +981,7 @@ export class App {
 
         ${this.ui.toast ? `<div class="toast">${this.ui.toast}</div>` : ""}
         ${this.renderShop()}
+        ${this.renderCompare()}
         ${this.renderSettings()}
         ${this.renderDiagnosis()}
         ${this.renderInspection()}
@@ -962,6 +1036,7 @@ export class App {
       if (which === "book") this.ui.showBook = false;
       if (which === "test") this.ui.showTest = false;
       if (which === "clear") this.ui.showClear = false;
+      if (which === "compare") this.ui.showCompare = false;
     };
 
     this.root.querySelectorAll<HTMLElement>("[data-close]").forEach((btn) => {
@@ -987,6 +1062,15 @@ export class App {
     this.root.querySelectorAll<HTMLElement>("[data-unplaced-id]").forEach((btn) => {
       btn.addEventListener("click", () => this.handleSelectUnplaced(btn.dataset.unplacedId!));
     });
+
+    this.root.querySelectorAll<HTMLInputElement>("[data-compare-toggle]").forEach((checkbox) => {
+      checkbox.addEventListener("change", () =>
+        this.handleToggleCompare(checkbox.dataset.compareToggle as DeviceType)
+      );
+    });
+    this.root.querySelector<HTMLElement>("[data-open-compare]")?.addEventListener("click", () =>
+      this.handleOpenCompare()
+    );
 
     this.root.querySelector('[data-claim="1"]')?.addEventListener("click", () => this.handleClaimReward());
     this.root.querySelector('[data-next-mission="1"]')?.addEventListener("click", () => this.handleNextMission());
