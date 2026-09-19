@@ -1,4 +1,12 @@
-import { findL2Domain, isValidIp, resolveAllConfigs, routerReachesInternet, sameSubnet } from "./netutils";
+import { CABLE_MAX_METERS, cableLengthMeters, isCableTooLong } from "./cables";
+import {
+  findL2Domain,
+  isValidIp,
+  resolveAllConfigs,
+  routerReachesInternet,
+  sameSubnet,
+  shortestPathDevices,
+} from "./netutils";
 import { connectionsOf, internetDeviceId } from "./state";
 import type {
   ClientConfig,
@@ -12,6 +20,8 @@ import type {
 
 const STEP_LABELS: Record<DiagStepKey, string> = {
   physical: "物理接続",
+  power: "電源",
+  cable: "ケーブル長",
   port: "ポート状態",
   ip: "IPアドレス",
   subnet: "サブネット",
@@ -36,6 +46,8 @@ function skipped(key: DiagStepKey): DiagStep {
 
 const REMAINING_ORDER: DiagStepKey[] = [
   "physical",
+  "power",
+  "cable",
   "port",
   "ip",
   "subnet",
@@ -50,8 +62,12 @@ export function diagnoseDevice(state: GameState, deviceId: string): DeviceDiagno
   const device = state.devices.find((d) => d.id === deviceId);
   const steps: DiagStep[] = [];
   const finish = (failedAt: number): DeviceDiagnosis => {
-    for (let i = failedAt + 1; i < REMAINING_ORDER.length; i++) {
-      steps.push(skipped(REMAINING_ORDER[i]));
+    // failedAt === -1 means every step already pushed "ok" (full success) -
+    // there is nothing left to mark as skipped.
+    if (failedAt >= 0) {
+      for (let i = failedAt + 1; i < REMAINING_ORDER.length; i++) {
+        steps.push(skipped(REMAINING_ORDER[i]));
+      }
     }
     return { deviceId, name: device?.name ?? deviceId, steps, success: failedAt === -1 };
   };
@@ -74,79 +90,112 @@ export function diagnoseDevice(state: GameState, deviceId: string): DeviceDiagno
   }
   steps.push(ok("physical"));
 
-  // 2. port status along the direct link + router side
+  const path = shortestPathDevices(state, device.id, domain.router.id) ?? [device, domain.router];
+
+  // 2. power along the path to the router (the passive jack/patch-panel hops have no power field)
+  const unpoweredHop = path.find((d) => d.id !== device.id && d.power === "off");
+  if (unpoweredHop) {
+    steps.push(fail("power", `${unpoweredHop.name}の電源が入っていません。`));
+    return finish(1);
+  }
+  steps.push(ok("power"));
+
+  // 3. cable length along the same path (straight-line distance; design doc v3 §12)
+  let tooLong: { a: string; b: string; length: number } | null = null;
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i];
+    const b = path[i + 1];
+    if (a.x === null || a.y === null || b.x === null || b.y === null) continue;
+    const length = cableLengthMeters(a.x, a.y, b.x, b.y);
+    if (isCableTooLong(length)) {
+      tooLong = { a: a.name, b: b.name, length };
+      break;
+    }
+  }
+  if (tooLong) {
+    steps.push(
+      fail(
+        "cable",
+        `${tooLong.a} ↔ ${tooLong.b} 間のケーブルが長すぎます（${tooLong.length.toFixed(1)}m / 上限${CABLE_MAX_METERS}m）。中継するスイッチやパッチパネルを間に設置しましょう。`
+      )
+    );
+    return finish(2);
+  }
+  steps.push(ok("cable"));
+
+  // 4. port status along the direct link
   const myDownLink = connectionsOf(state, device.id)[0];
   const myPort = device.ports.find(
     (p) => p.id === myDownLink.fromPort || p.id === myDownLink.toPort
   );
   if (myPort && myPort.status === "down") {
     steps.push(fail("port", `${device.name}のポートが無効になっています。`));
-    return finish(1);
+    return finish(3);
   }
   steps.push(ok("port"));
 
-  // 3. IP
+  // 5. IP
   const resolved = resolveAllConfigs(state).get(device.id) ?? {};
   const cfg = device.networkConfig as ClientConfig | undefined;
   if (resolved.duplicateOf) {
     steps.push(fail("ip", `IPアドレスが重複しています（${resolved.duplicateOf}と同じ）。`));
-    return finish(2);
+    return finish(4);
   }
   if (cfg?.dhcpEnabled && resolved.dhcpFailed) {
     steps.push(fail("ip", "IPアドレスを取得できません（DHCPサーバーが見つかりません）。"));
-    return finish(2);
+    return finish(4);
   }
   if (!resolved.ip || !isValidIp(resolved.ip)) {
     steps.push(fail("ip", "IPアドレスが設定されていません。"));
-    return finish(2);
+    return finish(4);
   }
   steps.push(ok("ip"));
 
-  // 4. Subnet
+  // 6. Subnet
   if (!resolved.subnetMask || !isValidIp(resolved.subnetMask)) {
     steps.push(fail("subnet", "サブネットマスクが設定されていません。"));
-    return finish(3);
+    return finish(5);
   }
   steps.push(ok("subnet"));
 
-  // 5. Gateway
+  // 7. Gateway
   const routerConfig = domain.router.networkConfig as RouterConfig;
   if (!resolved.gateway) {
     steps.push(fail("gateway", "デフォルトゲートウェイが設定されていません。"));
-    return finish(4);
+    return finish(6);
   }
   if (!sameSubnet(resolved.ip, resolved.gateway, resolved.subnetMask)) {
     steps.push(fail("gateway", `ゲートウェイ（${resolved.gateway}）が自分のサブネットと異なります。`));
-    return finish(4);
+    return finish(6);
   }
   if (resolved.gateway !== routerConfig.lanIp) {
     steps.push(fail("gateway", `ゲートウェイ（${resolved.gateway}）に到達できません。`));
-    return finish(4);
+    return finish(6);
   }
   steps.push(ok("gateway"));
 
-  // 6. Routing (router -> internet, e.g. via ONU)
+  // 8. Routing (router -> internet, e.g. via ONU)
   if (!routerReachesInternet(state, domain.router.id, internetDeviceId())) {
     steps.push(fail("route", "ルーターがインターネット回線（ONU）に接続されていません。"));
-    return finish(5);
+    return finish(7);
   }
   steps.push(ok("route"));
 
-  // 7. NAT
+  // 9. NAT
   if (!routerConfig.natEnabled) {
     steps.push(fail("nat", "ルーターのNAT設定が無効になっています。"));
-    return finish(6);
+    return finish(8);
   }
   steps.push(ok("nat"));
 
-  // 8. DNS
+  // 10. DNS
   if (!resolved.dns || !isValidIp(resolved.dns)) {
     steps.push(fail("dns", "DNSサーバーが設定されていません。"));
-    return finish(7);
+    return finish(9);
   }
   steps.push(ok("dns"));
 
-  // 9. Internet
+  // 11. Internet
   steps.push(ok("internet"));
   return finish(-1);
 }

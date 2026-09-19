@@ -124,7 +124,7 @@ body {
 .office {
   position: relative;
   width: 640px;
-  height: 900px;
+  height: 1100px;
   background-image: linear-gradient(
       to right,
       rgba(255, 255, 255, 0.03) 1px,
@@ -153,6 +153,35 @@ body {
   stroke: var(--warn);
   stroke-dasharray: 2 6;
   stroke-width: 2.5;
+}
+
+.cable--too-long {
+  stroke: var(--danger);
+  stroke-dasharray: 6 4;
+}
+
+.cable-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 18;
+  pointer-events: stroke;
+}
+
+.room {
+  position: absolute;
+  border: 1px dashed rgba(143, 164, 179, 0.4);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  pointer-events: none;
+}
+
+.room-label {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
 }
 
 .device {
