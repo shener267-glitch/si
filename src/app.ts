@@ -15,6 +15,7 @@ import {
   placedDevices,
   portUsageCount,
   resetState,
+  setPortStatus,
   togglePower,
   unplacedDevices,
   updateClientConfig,
@@ -144,6 +145,8 @@ export class App {
     "switch8",
     "onu",
     "wifi",
+    "lan_jack",
+    "patch_panel",
   ];
 
   private openDeviceAction(device: Device) {
@@ -486,6 +489,30 @@ export class App {
     </label>`;
   }
 
+  private renderPortToggles(device: Device): string {
+    if (device.ports.length === 0) return "";
+    const rows = device.ports
+      .map((port) => {
+        const conn = this.state.connections.find(
+          (c) =>
+            (c.fromDevice === device.id && c.fromPort === port.id) ||
+            (c.toDevice === device.id && c.toPort === port.id)
+        );
+        const otherId = conn ? (conn.fromDevice === device.id ? conn.toDevice : conn.fromDevice) : null;
+        const other = otherId ? deviceById(this.state, otherId) : null;
+        const label = `${port.type}ポート${other ? ` → ${other.name}` : "（空き）"}`;
+        return `<label class="field field--checkbox">
+          <input type="checkbox" ${port.status === "up" ? "checked" : ""} data-port-fault-toggle="${device.id}:${port.id}" />
+          <span>${label}</span>
+        </label>`;
+      })
+      .join("");
+    return `<div class="port-toggle-list">
+      <div class="port-toggle-label">🔌 ポート状態（チェックを外すとポート障害として扱われます）</div>
+      ${rows}
+    </div>`;
+  }
+
   private renderSettings(): string {
     if (!this.ui.showSettings || !this.ui.settingsDeviceId) return "";
     const device = deviceById(this.state, this.ui.settingsDeviceId);
@@ -497,6 +524,18 @@ export class App {
           <div class="sheet-header"><h2>⚙ ${device.name} の設定</h2><button class="close-btn" data-close="settings">✕</button></div>
           <form class="settings-form">
             ${this.renderPowerToggle(device)}
+            ${this.renderPortToggles(device)}
+          </form>
+        </div>
+      </div>`;
+    }
+
+    if (device.type === "lan_jack" || device.type === "patch_panel") {
+      return `<div class="overlay" data-overlay="settings">
+        <div class="sheet">
+          <div class="sheet-header"><h2>⚙ ${device.name} の設定</h2><button class="close-btn" data-close="settings">✕</button></div>
+          <form class="settings-form">
+            ${this.renderPortToggles(device)}
           </form>
         </div>
       </div>`;
@@ -509,6 +548,7 @@ export class App {
           <div class="sheet-header"><h2>⚙ ${device.name} の設定</h2><button class="close-btn" data-close="settings">✕</button></div>
           <form id="settings-form" class="settings-form">
             ${this.renderPowerToggle(device)}
+            ${this.renderPortToggles(device)}
             <label class="field">
               <span>ルーターのIPアドレス（ゲートウェイ）</span>
               <input name="lanIp" type="text" value="${cfg.lanIp}" placeholder="192.168.1.1" />
@@ -578,6 +618,7 @@ export class App {
               <input name="dns" type="text" value="${cfg.dns ?? ""}" placeholder="192.168.1.1" />
             </label>
           </div>
+          ${this.renderPortToggles(device)}
           <button type="button" class="save-btn" data-save-client="${device.id}">保存</button>
         </form>
       </div>
@@ -973,6 +1014,14 @@ export class App {
     this.root.querySelectorAll<HTMLInputElement>("[data-power-toggle]").forEach((checkbox) => {
       checkbox.addEventListener("change", () => {
         togglePower(this.state, checkbox.dataset.powerToggle!);
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLInputElement>("[data-port-fault-toggle]").forEach((checkbox) => {
+      checkbox.addEventListener("change", () => {
+        const [deviceId, portId] = checkbox.dataset.portFaultToggle!.split(":");
+        setPortStatus(this.state, deviceId, portId, checkbox.checked ? "up" : "down");
         this.render();
       });
     });

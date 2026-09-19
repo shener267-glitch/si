@@ -594,6 +594,20 @@ body {
   font-size: 12.5px;
 }
 
+.port-toggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.port-toggle-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
 .dhcp-status-row {
   display: flex;
   justify-content: space-between;
