@@ -132,17 +132,27 @@ export function diagnoseDevice(state: GameState, deviceId: string): DeviceDiagno
   }
   steps.push(ok("cable"));
 
-  // 4. port status on the hop the path above actually uses (a device with two links,
-  // e.g. Ethernet + Wi-Fi, could otherwise have its unrelated idle link checked instead).
-  const myDownLink =
-    path.length > 1
-      ? findConnectionBetween(state, device.id, path[1].id)
-      : connectionsOf(state, device.id)[0];
-  const myPort = myDownLink
-    ? device.ports.find((p) => p.id === myDownLink.fromPort || p.id === myDownLink.toPort)
-    : undefined;
-  if (myPort && myPort.status === "down") {
-    steps.push(fail("port", `${device.name}のポートが無効になっています。`));
+  // 4. port status along the whole path - a disabled port on EITHER end of any hop
+  // (not just this device's own NIC) breaks that link, e.g. a faulted switch port.
+  let downPortHop: { name: string } | null = null;
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i];
+    const b = path[i + 1];
+    const link = findConnectionBetween(state, a.id, b.id);
+    if (!link) continue;
+    const aPort = a.ports.find((p) => p.id === link.fromPort || p.id === link.toPort);
+    const bPort = b.ports.find((p) => p.id === link.fromPort || p.id === link.toPort);
+    if (aPort?.status === "down") {
+      downPortHop = { name: a.name };
+      break;
+    }
+    if (bPort?.status === "down") {
+      downPortHop = { name: b.name };
+      break;
+    }
+  }
+  if (downPortHop) {
+    steps.push(fail("port", `${downPortHop.name}のポートが無効になっています。`));
     return finish(3);
   }
   steps.push(ok("port"));

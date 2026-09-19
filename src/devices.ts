@@ -81,6 +81,14 @@ export const DEVICE_CATALOG: DeviceCatalogItem[] = [
     description: "通信室でLANコンセントの配線をまとめ、スイッチへ引き渡す。",
     ports: Array.from({ length: 8 }, () => ({ type: "ETHERNET" as const })),
   },
+  {
+    type: "rack",
+    label: "通信ラック",
+    price: 60_000,
+    icon: "🗃️",
+    description: "通信室に設置し、ONU・ルーター・スイッチ・パッチパネルをまとめて収める什器。ケーブルはつなげない。",
+    ports: [],
+  },
 ];
 
 export const INTERNET_ICON = "☁️";
@@ -110,6 +118,8 @@ export function shortLabel(type: DeviceType): string {
       return "Jack";
     case "patch_panel":
       return "Patch";
+    case "rack":
+      return "Rack";
     case "internet":
       return "Internet";
   }

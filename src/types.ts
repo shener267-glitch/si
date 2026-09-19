@@ -8,6 +8,7 @@ export type DeviceType =
   | "wifi"
   | "lan_jack"
   | "patch_panel"
+  | "rack"
   | "internet";
 
 export type PortType = "WAN" | "LAN" | "ETHERNET" | "WIFI";
