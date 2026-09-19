@@ -804,6 +804,11 @@ export class App {
   private render() {
     const s = this.state;
     const mission = currentMission(s);
+    // Every state change re-renders the whole shell (innerHTML replace), which would
+    // otherwise reset the map's scroll position back to the top-left on every tap.
+    const prevOfficeWrap = this.root.querySelector<HTMLElement>(".office-wrap");
+    const scrollTop = prevOfficeWrap?.scrollTop ?? 0;
+    const scrollLeft = prevOfficeWrap?.scrollLeft ?? 0;
     this.root.innerHTML = `
       <div class="app-shell">
         <header class="topbar">
@@ -850,6 +855,12 @@ export class App {
         ${this.renderClear()}
       </div>
     `;
+
+    const nextOfficeWrap = this.root.querySelector<HTMLElement>(".office-wrap");
+    if (nextOfficeWrap) {
+      nextOfficeWrap.scrollTop = scrollTop;
+      nextOfficeWrap.scrollLeft = scrollLeft;
+    }
 
     this.bindEvents();
   }
