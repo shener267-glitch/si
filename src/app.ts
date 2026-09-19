@@ -834,15 +834,25 @@ export class App {
     const totalSpent = this.state.devices
       .filter((d) => d.type !== "internet")
       .reduce((sum, d) => sum + d.price, 0);
+    const budgetMatch = mission.budgetHint.match(/¥([\d,]+)/);
+    const budgetAmount = budgetMatch ? Number(budgetMatch[1].replace(/,/g, "")) : null;
+    const testResults = runCommunicationTest(this.state);
+    const successRate =
+      testResults.length > 0 ? Math.round((testResults.filter((r) => r.success).length / testResults.length) * 100) : 100;
     return `<div class="overlay" data-overlay="clear">
       <div class="clear-screen">
         <div class="clear-title">🎉 案件完了！</div>
         <div class="clear-sub">${mission.client} 様より、${mission.title}の完了確認をいただきました。</div>
         <div class="clear-stats">
           <div>報酬：${money(mission.reward)}</div>
+          <div>通信成功率：${successRate}%（${testResults.filter((r) => r.success).length}/${testResults.length}台）</div>
+          <div>施工コスト：${money(totalSpent)}${budgetAmount !== null ? ` / ${money(budgetAmount)}` : ""}</div>
           <div>配線距離：${totalCableLength.toFixed(1)}m</div>
-          <div>施工コスト：${money(totalSpent)}</div>
           <div>配線ミス：${this.state.wiringMistakes}件</div>
+        </div>
+        <div class="clear-requirements">
+          <div class="clear-requirements-label">顧客要求</div>
+          ${mission.requirements.map((r) => `<div class="clear-requirement">✅ ${r}</div>`).join("")}
         </div>
         ${
           hasNext

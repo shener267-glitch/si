@@ -190,4 +190,27 @@ export const MISSIONS: Mission[] = [
         : { ok: false, detail: "倉庫内のPC・サーバーがまだインターネットに接続できていません。" };
     },
   },
+  {
+    id: "m8",
+    title: "案件08",
+    description: "会議室にWi-Fiアクセスポイントを設置し、無線で通信できるようにせよ",
+    reward: 150_000,
+    client: "あおぞら商事株式会社 営業部",
+    deadline: "納期：3日後",
+    budgetHint: "予算目安：¥150,000",
+    requirements: [
+      "会議室ではケーブルを引きにくいので、Wi-Fiで対応してほしいとのことです。",
+      "ノートPCが無線でインターネットに接続できることを確認してください。",
+    ],
+    check: (state) => {
+      const wifiOnline = state.devices.some((d) => {
+        if ((d.type !== "pc" && d.type !== "server") || d.x === null) return false;
+        if (!diagnoseDevice(state, d.id).success) return false;
+        return connectionsOf(state, d.id).some((c) => c.kind === "wifi");
+      });
+      return wifiOnline
+        ? { ok: true }
+        : { ok: false, detail: "Wi-Fi接続で正常に通信できているPC・サーバーがまだありません。" };
+    },
+  },
 ];
