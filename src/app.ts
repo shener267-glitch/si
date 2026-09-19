@@ -1,5 +1,6 @@
+import { BOOK_CATEGORIES, findBookPage } from "./book";
 import { cableLengthMeters } from "./cables";
-import { DEVICE_CATALOG, iconFor } from "./devices";
+import { DEVICE_CATALOG, iconFor, shortLabel } from "./devices";
 import { diagnoseDevice, ping, runCommunicationTest } from "./diagnostics";
 import { currentMission, MISSIONS } from "./missions";
 import { isValidIp } from "./netutils";
@@ -36,8 +37,14 @@ interface UiState {
   showClear: boolean;
   showSettings: boolean;
   showDiagnosis: boolean;
+  showInspection: boolean;
+  showBook: boolean;
+  showJobLetter: boolean;
   settingsDeviceId: string | null;
   diagnosisDeviceId: string | null;
+  inspectionDeviceId: string | null;
+  bookCategoryId: string | null;
+  bookPageId: string | null;
   pingTarget: string;
   pingResult: PingResult | null;
   toast: string | null;
@@ -51,8 +58,14 @@ function initialUi(): UiState {
     showClear: false,
     showSettings: false,
     showDiagnosis: false,
+    showInspection: false,
+    showBook: false,
+    showJobLetter: false,
     settingsDeviceId: null,
     diagnosisDeviceId: null,
+    inspectionDeviceId: null,
+    bookCategoryId: null,
+    bookPageId: null,
     pingTarget: "",
     pingResult: null,
     toast: null,
@@ -149,11 +162,20 @@ export class App {
         this.ui.diagnosisDeviceId = device.id;
         this.ui.showDiagnosis = true;
         this.ui.pingResult = null;
-        this.render();
       } else {
-        this.setToast("PCまたはサーバーを選んでください。");
+        this.ui.inspectionDeviceId = device.id;
+        this.ui.showInspection = true;
       }
+      this.render();
     }
+  }
+
+  private roomFor(device: Device): string | null {
+    if (device.x === null || device.y === null) return null;
+    const room = this.state.rooms.find(
+      (r) => device.x! >= r.x && device.x! <= r.x + r.width && device.y! >= r.y && device.y! <= r.y + r.height
+    );
+    return room?.name ?? null;
   }
 
   private handleCableTap(connId: string) {
@@ -361,9 +383,9 @@ export class App {
       case "settings":
         return "設定したい機器（ルーター／スイッチ／ONU／AP／PC／サーバー）をタップしてください。";
       case "diagnosing":
-        return "診断したいPCまたはサーバーをタップしてください。";
+        return "調べたい機器をタップしてください（PC/サーバーは通信診断、それ以外は現場調査）。";
       default:
-        return "🛒購入・🖐移動・🔌配線・⚙設定・🔍診断・▶テストで操作しよう。";
+        return "🛒購入・🖐移動・🔌配線・⚙設定・🔍調査・▶テストで操作しよう。分からないことは📖で調べられます。";
     }
   }
 
@@ -587,6 +609,124 @@ export class App {
     </div>`;
   }
 
+  private renderInspection(): string {
+    if (!this.ui.showInspection || !this.ui.inspectionDeviceId) return "";
+    const device = deviceById(this.state, this.ui.inspectionDeviceId);
+    if (!device) return "";
+    const room = this.roomFor(device);
+
+    const portRows = device.ports
+      .map((port) => {
+        const conn = this.state.connections.find(
+          (c) =>
+            (c.fromDevice === device.id && c.fromPort === port.id) ||
+            (c.toDevice === device.id && c.toPort === port.id)
+        );
+        if (!conn) {
+          return `<div class="inspect-port">
+            <div class="inspect-port-name">${port.type}ポート ${port.status === "down" ? "（無効）" : ""}</div>
+            <div class="inspect-port-detail">空き</div>
+          </div>`;
+        }
+        const otherId = conn.fromDevice === device.id ? conn.toDevice : conn.fromDevice;
+        const other = deviceById(this.state, otherId);
+        let cableInfo = "接続先の情報が取得できません。";
+        if (other && device.x !== null && device.y !== null && other.x !== null && other.y !== null) {
+          if (conn.kind === "wifi") {
+            cableInfo = "種類：無線（Wi-Fi）";
+          } else {
+            const len = cableLengthMeters(device.x, device.y, other.x, other.y);
+            cableInfo = `規格：Cat6 / 長さ：${len.toFixed(1)}m${len > 100 ? "（上限オーバー）" : ""}`;
+          }
+        }
+        return `<div class="inspect-port">
+          <div class="inspect-port-name">${port.type}ポート ${port.status === "down" ? "（無効）" : ""}</div>
+          <div class="inspect-port-detail">接続先：${other ? other.name : "不明"}<br>${cableInfo}</div>
+        </div>`;
+      })
+      .join("");
+
+    return `<div class="overlay" data-overlay="inspection">
+      <div class="sheet">
+        <div class="sheet-header"><h2>🔍 ${device.name} の現場調査</h2><button class="close-btn" data-close="inspection">✕</button></div>
+        <div class="inspect-summary">
+          <div>機器種別：${shortLabel(device.type)}</div>
+          ${room ? `<div>設置場所：${room}</div>` : ""}
+          ${device.power !== undefined ? `<div>電源：${device.power === "on" ? "ON" : "OFF"}</div>` : ""}
+        </div>
+        <div class="inspect-ports">${portRows}</div>
+      </div>
+    </div>`;
+  }
+
+  private renderJobLetter(): string {
+    if (!this.ui.showJobLetter) return "";
+    const mission = currentMission(this.state);
+    return `<div class="overlay" data-overlay="jobletter">
+      <div class="sheet">
+        <div class="sheet-header"><h2>📩 依頼内容</h2><button class="close-btn" data-close="jobletter">✕</button></div>
+        <div class="job-letter">
+          <div class="job-letter-client">${mission.client}</div>
+          <div class="job-letter-body">${mission.description}</div>
+          <ul class="job-letter-reqs">
+            ${mission.requirements.map((r) => `<li>${r}</li>`).join("")}
+          </ul>
+          <div class="job-letter-meta">
+            <span>📅 ${mission.deadline}</span>
+            <span>💰 ${mission.budgetHint}</span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  private renderBook(): string {
+    if (!this.ui.showBook) return "";
+    let inner: string;
+    const page = this.ui.bookPageId ? findBookPage(this.ui.bookPageId) : null;
+    if (page) {
+      inner = `
+        <button class="book-back" data-book-back="category">← ${page.category.title}</button>
+        <h3 class="book-page-title">${page.page.icon} ${page.page.title}</h3>
+        <div class="book-section"><div class="book-section-label">① これは何？</div><div>${page.page.what}</div></div>
+        <div class="book-section"><div class="book-section-label">② 現実では？</div><div>${page.page.reality}</div></div>
+        <div class="book-section"><div class="book-section-label">③ ゲームでは？</div><div>${page.page.inGame}</div></div>
+        <div class="book-section"><div class="book-section-label">④ 構成例</div><pre class="book-example">${page.page.example}</pre></div>
+        ${
+          page.page.practiceMode
+            ? `<button class="save-btn" data-book-practice="${page.page.practiceMode}">🔧 この画面で試してみる</button>`
+            : ""
+        }
+      `;
+    } else if (this.ui.bookCategoryId) {
+      const category = BOOK_CATEGORIES.find((c) => c.id === this.ui.bookCategoryId);
+      inner = `
+        <button class="book-back" data-book-back="root">← カテゴリ一覧</button>
+        <div class="book-page-list">
+          ${
+            category?.pages
+              .map((p) => `<button class="book-page-item" data-book-page="${p.id}"><span>${p.icon}</span>${p.title}</button>`)
+              .join("") ?? ""
+          }
+        </div>
+      `;
+    } else {
+      inner = `
+        <div class="book-category-list">
+          ${BOOK_CATEGORIES.map(
+            (c) => `<button class="book-category-item" data-book-category="${c.id}"><span>${c.icon}</span>${c.title}</button>`
+          ).join("")}
+        </div>
+      `;
+    }
+    return `<div class="overlay" data-overlay="book">
+      <div class="sheet sheet--tall">
+        <div class="sheet-header"><h2>📖 説明ブック</h2><button class="close-btn" data-close="book">✕</button></div>
+        ${inner}
+      </div>
+    </div>`;
+  }
+
   private renderTest(): string {
     if (!this.ui.showTest) return "";
     const results = this.ui.testResults;
@@ -645,8 +785,8 @@ export class App {
       .reduce((sum, d) => sum + d.price, 0);
     return `<div class="overlay" data-overlay="clear">
       <div class="clear-screen">
-        <div class="clear-title">🎉 MISSION COMPLETE!</div>
-        <div class="clear-sub">${mission.title}：クリア！</div>
+        <div class="clear-title">🎉 案件完了！</div>
+        <div class="clear-sub">${mission.client} 様より、${mission.title}の完了確認をいただきました。</div>
         <div class="clear-stats">
           <div>報酬：${money(mission.reward)}</div>
           <div>配線距離：${totalCableLength.toFixed(1)}m</div>
@@ -654,8 +794,8 @@ export class App {
         </div>
         ${
           hasNext
-            ? `<button class="close-btn2" data-next-mission="1">次のミッションへ</button>`
-            : `<div class="clear-final">全ミッションクリア！お疲れさまでした。</div><button class="close-btn2" data-close="clear">とじる</button>`
+            ? `<button class="close-btn2" data-next-mission="1">次の依頼へ</button>`
+            : `<div class="clear-final">すべての依頼が完了しました！お疲れさまでした。</div><button class="close-btn2" data-close="clear">とじる</button>`
         }
       </div>
     </div>`;
@@ -668,10 +808,11 @@ export class App {
       <div class="app-shell">
         <header class="topbar">
           <div class="topbar-money">💰 ${money(s.money)}</div>
-          <div class="topbar-mission">
-            <div class="mission-title">${mission.title}${s.missionCleared[mission.id] ? "（達成）" : ""}</div>
+          <button class="topbar-mission" data-job-letter="1" title="依頼内容を確認">
+            <div class="mission-title">📩 ${mission.title}${s.missionCleared[mission.id] ? "（達成）" : ""}</div>
             <div class="mission-desc">${mission.description}</div>
-          </div>
+          </button>
+          <button class="book-btn" data-book="1" title="説明ブック">📖</button>
           <button class="reset-btn" data-reset="1" title="ゲームリセット">⟲</button>
         </header>
 
@@ -694,7 +835,7 @@ export class App {
           <button class="nav-btn ${s.mode === "moving" ? "nav-btn--active" : ""}" data-mode="moving"><span class="nav-icon">🖐</span><span class="nav-label">移動</span></button>
           <button class="nav-btn ${s.mode === "connecting" ? "nav-btn--active" : ""}" data-mode="connecting"><span class="nav-icon">🔌</span><span class="nav-label">配線</span></button>
           <button class="nav-btn ${s.mode === "settings" ? "nav-btn--active" : ""}" data-mode="settings"><span class="nav-icon">⚙</span><span class="nav-label">設定</span></button>
-          <button class="nav-btn ${s.mode === "diagnosing" ? "nav-btn--active" : ""}" data-mode="diagnosing"><span class="nav-icon">🔍</span><span class="nav-label">診断</span></button>
+          <button class="nav-btn ${s.mode === "diagnosing" ? "nav-btn--active" : ""}" data-mode="diagnosing"><span class="nav-icon">🔍</span><span class="nav-label">調査</span></button>
           <button class="nav-btn" data-test="1"><span class="nav-icon">▶</span><span class="nav-label">テスト</span></button>
         </footer>
 
@@ -702,6 +843,9 @@ export class App {
         ${this.renderShop()}
         ${this.renderSettings()}
         ${this.renderDiagnosis()}
+        ${this.renderInspection()}
+        ${this.renderJobLetter()}
+        ${this.renderBook()}
         ${this.renderTest()}
         ${this.renderClear()}
       </div>
@@ -720,6 +864,14 @@ export class App {
       this.render();
     });
     this.root.querySelector('[data-test="1"]')?.addEventListener("click", () => this.handleRunTest());
+    this.root.querySelector('[data-job-letter="1"]')?.addEventListener("click", () => {
+      this.ui.showJobLetter = true;
+      this.render();
+    });
+    this.root.querySelector('[data-book="1"]')?.addEventListener("click", () => {
+      this.ui.showBook = true;
+      this.render();
+    });
 
     this.root.querySelectorAll<HTMLElement>("[data-mode]").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -728,14 +880,20 @@ export class App {
       });
     });
 
+    const closeOverlay = (which: string | null | undefined) => {
+      if (which === "shop") this.ui.showShop = false;
+      if (which === "settings") this.ui.showSettings = false;
+      if (which === "diagnosis") this.ui.showDiagnosis = false;
+      if (which === "inspection") this.ui.showInspection = false;
+      if (which === "jobletter") this.ui.showJobLetter = false;
+      if (which === "book") this.ui.showBook = false;
+      if (which === "test") this.ui.showTest = false;
+      if (which === "clear") this.ui.showClear = false;
+    };
+
     this.root.querySelectorAll<HTMLElement>("[data-close]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const which = btn.dataset.close;
-        if (which === "shop") this.ui.showShop = false;
-        if (which === "settings") this.ui.showSettings = false;
-        if (which === "diagnosis") this.ui.showDiagnosis = false;
-        if (which === "test") this.ui.showTest = false;
-        if (which === "clear") this.ui.showClear = false;
+        closeOverlay(btn.dataset.close);
         this.render();
       });
     });
@@ -743,12 +901,7 @@ export class App {
     this.root.querySelectorAll<HTMLElement>(".overlay").forEach((overlay) => {
       overlay.addEventListener("click", (e) => {
         if (e.target === overlay) {
-          const which = overlay.getAttribute("data-overlay");
-          if (which === "shop") this.ui.showShop = false;
-          if (which === "settings") this.ui.showSettings = false;
-          if (which === "diagnosis") this.ui.showDiagnosis = false;
-          if (which === "test") this.ui.showTest = false;
-          if (which === "clear") this.ui.showClear = false;
+          closeOverlay(overlay.getAttribute("data-overlay"));
           this.render();
         }
       });
@@ -791,6 +944,37 @@ export class App {
         togglePower(this.state, checkbox.dataset.powerToggle!);
         this.render();
       });
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-book-category]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        this.ui.bookCategoryId = btn.dataset.bookCategory!;
+        this.ui.bookPageId = null;
+        this.render();
+      });
+    });
+    this.root.querySelectorAll<HTMLElement>("[data-book-page]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        this.ui.bookPageId = btn.dataset.bookPage!;
+        this.render();
+      });
+    });
+    this.root.querySelectorAll<HTMLElement>("[data-book-back]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (btn.dataset.bookBack === "root") {
+          this.ui.bookCategoryId = null;
+        }
+        this.ui.bookPageId = null;
+        this.render();
+      });
+    });
+    this.root.querySelector<HTMLElement>("[data-book-practice]")?.addEventListener("click", (e) => {
+      const mode = (e.currentTarget as HTMLElement).dataset.bookPractice as GameMode;
+      this.ui.showBook = false;
+      this.state.mode = mode;
+      this.state.selectedDeviceId = null;
+      this.state.connectFromId = null;
+      this.render();
     });
   }
 }

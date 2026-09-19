@@ -88,6 +88,11 @@ export interface Mission {
   title: string;
   description: string;
   reward: number;
+  /** Client-facing framing (design doc v4 §19) shown in the job-request letter. */
+  client: string;
+  deadline: string;
+  budgetHint: string;
+  requirements: string[];
   /** Returns null when the mission's requirement is met, otherwise a short reason it's not. */
   check: (state: GameState) => { ok: boolean; detail?: string };
   /** Called once when this mission becomes the active mission (e.g. to inject a fault). */
