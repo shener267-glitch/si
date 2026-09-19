@@ -1,34 +1,24 @@
-import { catalogItem, shortLabel } from "./devices";
-import { MISSION_01 } from "./missions";
-import { validateConnection } from "./rules";
-import type {
-  Connection,
-  Device,
-  DeviceType,
-  GameState,
-} from "./types";
+import { catalogItem, createDevice, shortLabel } from "./devices";
+import { validatePhysicalConnection } from "./rules";
+import type { ClientConfig, Connection, Device, DeviceType, GameState, RouterConfig } from "./types";
 
 const OFFICE_WIDTH = 640;
-const OFFICE_HEIGHT = 760;
+const OFFICE_HEIGHT = 900;
 const INTERNET_ID = "internet-0";
 
+export const OFFICE_SIZE = { width: OFFICE_WIDTH, height: OFFICE_HEIGHT };
+export const STARTING_MONEY = 1_500_000;
+
 export function createInitialState(): GameState {
-  const internet: Device = {
-    id: INTERNET_ID,
-    type: "internet",
-    name: "INTERNET",
-    x: OFFICE_WIDTH / 2,
-    y: OFFICE_HEIGHT - 60,
-    price: 0,
-    ports: null,
-    connections: [],
-  };
+  const internet = createDevice("internet", INTERNET_ID, "INTERNET", 0);
+  internet.x = OFFICE_WIDTH / 2;
+  internet.y = 50;
   return {
-    money: MISSION_01.budget,
+    money: STARTING_MONEY,
     devices: [internet],
     connections: [],
-    mission: MISSION_01,
-    missionCleared: false,
+    missionIndex: 0,
+    missionCleared: {},
     mode: "idle",
     selectedDeviceId: null,
     connectFromId: null,
@@ -37,7 +27,9 @@ export function createInitialState(): GameState {
   };
 }
 
-export const OFFICE_SIZE = { width: OFFICE_WIDTH, height: OFFICE_HEIGHT };
+export function internetDeviceId(): string {
+  return INTERNET_ID;
+}
 
 function nextSeq(state: GameState, type: DeviceType): number {
   const n = (state.nextDeviceSeq[type] ?? 0) + 1;
@@ -51,16 +43,9 @@ export function buyDevice(state: GameState, type: DeviceType): { ok: boolean; re
     return { ok: false, reason: "所持金が足りません。" };
   }
   const seq = nextSeq(state, type);
-  const device: Device = {
-    id: `${type}-${seq}-${Date.now().toString(36)}`,
-    type,
-    name: `${shortLabel(type)}-${String(seq).padStart(2, "0")}`,
-    x: null,
-    y: null,
-    price: item.price,
-    ports: item.ports,
-    connections: [],
-  };
+  const id = `${type}-${seq}-${Date.now().toString(36)}`;
+  const name = `${shortLabel(type)}-${String(seq).padStart(2, "0")}`;
+  const device = createDevice(type, id, name, item.price);
   state.money -= item.price;
   state.devices.push(device);
   return { ok: true };
@@ -74,24 +59,29 @@ export function placedDevices(state: GameState): Device[] {
   return state.devices.filter((d) => d.x !== null);
 }
 
-export function placeDevice(
-  state: GameState,
-  deviceId: string,
-  x: number,
-  y: number
-): void {
-  const device = state.devices.find((d) => d.id === deviceId);
+export function deviceById(state: GameState, id: string): Device | undefined {
+  return state.devices.find((d) => d.id === id);
+}
+
+export function placeDevice(state: GameState, deviceId: string, x: number, y: number): void {
+  const device = deviceById(state, deviceId);
   if (!device) return;
-  const clampedX = Math.max(24, Math.min(OFFICE_WIDTH - 24, x));
-  const clampedY = Math.max(24, Math.min(OFFICE_HEIGHT - 24, y));
-  device.x = clampedX;
-  device.y = clampedY;
+  device.x = Math.max(24, Math.min(OFFICE_WIDTH - 24, x));
+  device.y = Math.max(24, Math.min(OFFICE_HEIGHT - 24, y));
 }
 
 export function moveDevice(state: GameState, deviceId: string, x: number, y: number): void {
-  const device = state.devices.find((d) => d.id === deviceId);
+  const device = deviceById(state, deviceId);
   if (!device || device.type === "internet") return;
   placeDevice(state, deviceId, x, y);
+}
+
+export function portUsageCount(state: GameState, deviceId: string, portId: string): number {
+  return state.connections.filter(
+    (c) =>
+      (c.fromDevice === deviceId && c.fromPort === portId) ||
+      (c.toDevice === deviceId && c.toPort === portId)
+  ).length;
 }
 
 export function connectDevices(
@@ -99,28 +89,79 @@ export function connectDevices(
   fromId: string,
   toId: string
 ): { ok: boolean; reason?: string } {
-  const a = state.devices.find((d) => d.id === fromId);
-  const b = state.devices.find((d) => d.id === toId);
+  const a = deviceById(state, fromId);
+  const b = deviceById(state, toId);
   if (!a || !b) return { ok: false, reason: "機器が見つかりません。" };
-  const check = validateConnection(a, b);
-  if (!check.ok) return check;
+  const alreadyDirectlyLinked = state.connections.some(
+    (c) =>
+      (c.fromDevice === a.id && c.toDevice === b.id) ||
+      (c.fromDevice === b.id && c.toDevice === a.id)
+  );
+  if (alreadyDirectlyLinked) {
+    return { ok: false, reason: "すでに接続されています。" };
+  }
+  const usageOf = (deviceId: string, portId: string) => portUsageCount(state, deviceId, portId);
+  const check = validatePhysicalConnection(a, b, usageOf);
+  if (!check.ok || !check.fromPort || !check.toPort) {
+    return { ok: false, reason: check.reason };
+  }
   const conn: Connection = {
     id: `conn-${state.nextConnSeq++}`,
-    fromId: a.id,
-    toId: b.id,
+    fromDevice: a.id,
+    fromPort: check.fromPort.id,
+    toDevice: b.id,
+    toPort: check.toPort.id,
+    kind: check.fromPort.type === "WIFI" ? "wifi" : "ethernet",
   };
   state.connections.push(conn);
-  a.connections.push(conn.id);
-  b.connections.push(conn.id);
   return { ok: true };
 }
 
-export function deviceById(state: GameState, id: string): Device | undefined {
-  return state.devices.find((d) => d.id === id);
+export function connectionsOf(state: GameState, deviceId: string): Connection[] {
+  return state.connections.filter((c) => c.fromDevice === deviceId || c.toDevice === deviceId);
 }
 
-export function internetDeviceId(): string {
-  return INTERNET_ID;
+export function neighborsOf(state: GameState, deviceId: string): Device[] {
+  const result: Device[] = [];
+  for (const c of connectionsOf(state, deviceId)) {
+    const otherId = c.fromDevice === deviceId ? c.toDevice : c.fromDevice;
+    const other = deviceById(state, otherId);
+    if (other) result.push(other);
+  }
+  return result;
+}
+
+export function setPortStatus(
+  state: GameState,
+  deviceId: string,
+  portId: string,
+  status: "up" | "down"
+): void {
+  const device = deviceById(state, deviceId);
+  const port = device?.ports.find((p) => p.id === portId);
+  if (port) port.status = status;
+}
+
+export function updateClientConfig(
+  state: GameState,
+  deviceId: string,
+  patch: Partial<ClientConfig>
+): void {
+  const device = deviceById(state, deviceId);
+  if (!device || (device.type !== "pc" && device.type !== "server")) return;
+  const current = (device.networkConfig as ClientConfig) ?? { dhcpEnabled: true };
+  device.networkConfig = { ...current, ...patch };
+}
+
+export function updateRouterConfig(
+  state: GameState,
+  deviceId: string,
+  patch: Partial<RouterConfig>
+): void {
+  const device = deviceById(state, deviceId);
+  if (!device || device.type !== "router") return;
+  const current = device.networkConfig as RouterConfig;
+  device.networkConfig = { ...current, ...patch };
 }
 
 export function resetState(): GameState {
