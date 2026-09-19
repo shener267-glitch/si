@@ -111,6 +111,8 @@ export interface GameState {
   connectFromId: string | null;
   nextDeviceSeq: Record<string, number>;
   nextConnSeq: number;
+  /** Failed wiring attempts (port full, incompatible ports, etc.) - shown in the evaluation screen. */
+  wiringMistakes: number;
 }
 
 export type DiagStepKey =
