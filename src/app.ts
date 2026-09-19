@@ -1,5 +1,5 @@
 import { BOOK_CATEGORIES, findBookPage } from "./book";
-import { cableLengthMeters } from "./cables";
+import { cableLengthMeters, isCableTooLong } from "./cables";
 import { DEVICE_CATALOG, iconFor, shortLabel } from "./devices";
 import { diagnoseDevice, ping, runCommunicationTest } from "./diagnostics";
 import { currentMission, MISSIONS } from "./missions";
@@ -423,7 +423,7 @@ export class App {
         const a = byId.get(c.fromDevice);
         const b = byId.get(c.toDevice);
         if (!a || !b || a.x === null || a.y === null || b.x === null || b.y === null) return "";
-        const tooLong = cableLengthMeters(a.x, a.y, b.x, b.y) > 100;
+        const tooLong = isCableTooLong(cableLengthMeters(a.x, a.y, b.x, b.y));
         return `<line data-conn-id="${c.id}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" class="cable-hit" />
           <line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" class="cable ${
             c.kind === "wifi" ? "cable--wifi" : ""
@@ -646,7 +646,7 @@ export class App {
             cableInfo = "種類：無線（Wi-Fi）";
           } else {
             const len = cableLengthMeters(device.x, device.y, other.x, other.y);
-            cableInfo = `規格：Cat6 / 長さ：${len.toFixed(1)}m${len > 100 ? "（上限オーバー）" : ""}`;
+            cableInfo = `規格：Cat6 / 長さ：${len.toFixed(1)}m${isCableTooLong(len) ? "（上限オーバー）" : ""}`;
           }
         }
         return `<div class="inspect-port">
