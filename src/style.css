@@ -578,6 +578,45 @@ body {
   padding-bottom: 2px;
 }
 
+/* `.manual-fields { display: flex }` above otherwise wins over the UA's default
+   `[hidden] { display: none }` (author origin beats UA origin regardless of
+   specificity), so the hidden attribute alone never actually hid these. */
+.dhcp-fields[hidden],
+.manual-fields[hidden] {
+  display: none;
+}
+
+.dhcp-status {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+}
+
+.dhcp-status-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  color: var(--text);
+}
+
+.dhcp-status-row span:first-child {
+  color: var(--text-dim);
+}
+
+.dhcp-status-row span:last-child {
+  font-family: "SF Mono", "Menlo", monospace;
+  color: var(--accent-2);
+}
+
+.dhcp-status-empty {
+  color: var(--warn);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .save-btn {
   margin-top: 4px;
   background: var(--accent);
@@ -623,8 +662,14 @@ body {
 
 .diag-row-detail {
   font-size: 11px;
-  color: var(--danger);
+  color: var(--text-dim);
   margin-top: 2px;
+  font-family: "SF Mono", "Menlo", monospace;
+}
+
+.diag-row--fail .diag-row-detail {
+  color: var(--danger);
+  font-family: inherit;
 }
 
 .ping-tool {
