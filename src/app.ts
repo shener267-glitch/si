@@ -801,6 +801,7 @@ export class App {
           <div>報酬：${money(mission.reward)}</div>
           <div>配線距離：${totalCableLength.toFixed(1)}m</div>
           <div>施工コスト：${money(totalSpent)}</div>
+          <div>配線ミス：${this.state.wiringMistakes}件</div>
         </div>
         ${
           hasNext

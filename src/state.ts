@@ -26,6 +26,7 @@ export function createInitialState(): GameState {
     connectFromId: null,
     nextDeviceSeq: {},
     nextConnSeq: 1,
+    wiringMistakes: 0,
   };
 }
 
@@ -108,6 +109,9 @@ export function connectDevices(
   const usageOf = (deviceId: string, portId: string) => portUsageCount(state, deviceId, portId);
   const check = validatePhysicalConnection(a, b, usageOf);
   if (!check.ok || !check.fromPort || !check.toPort) {
+    // A genuine wiring mistake (incompatible ports, no free port) - not just a
+    // harmless re-tap - counted for the job-evaluation screen (design doc v4 §20).
+    state.wiringMistakes += 1;
     return { ok: false, reason: check.reason };
   }
   const conn: Connection = {
