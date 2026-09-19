@@ -32,8 +32,8 @@ const STEP_LABELS: Record<DiagStepKey, string> = {
   internet: "インターネット到達",
 };
 
-function ok(key: DiagStepKey): DiagStep {
-  return { key, label: STEP_LABELS[key], status: "ok" };
+function ok(key: DiagStepKey, detail?: string): DiagStep {
+  return { key, label: STEP_LABELS[key], status: "ok", detail };
 }
 
 function fail(key: DiagStepKey, detail: string): DiagStep {
@@ -149,14 +149,14 @@ export function diagnoseDevice(state: GameState, deviceId: string): DeviceDiagno
     steps.push(fail("ip", "IPアドレスが設定されていません。"));
     return finish(4);
   }
-  steps.push(ok("ip"));
+  steps.push(ok("ip", `${resolved.ip}${cfg?.dhcpEnabled ? "（DHCPで自動取得）" : "（手動設定）"}`));
 
   // 6. Subnet
   if (!resolved.subnetMask || !isValidIp(resolved.subnetMask)) {
     steps.push(fail("subnet", "サブネットマスクが設定されていません。"));
     return finish(5);
   }
-  steps.push(ok("subnet"));
+  steps.push(ok("subnet", resolved.subnetMask));
 
   // 7. Gateway
   const routerConfig = domain.router.networkConfig as RouterConfig;
@@ -172,7 +172,7 @@ export function diagnoseDevice(state: GameState, deviceId: string): DeviceDiagno
     steps.push(fail("gateway", `ゲートウェイ（${resolved.gateway}）に到達できません。`));
     return finish(6);
   }
-  steps.push(ok("gateway"));
+  steps.push(ok("gateway", resolved.gateway));
 
   // 8. Routing (router -> internet, e.g. via ONU)
   if (!routerReachesInternet(state, domain.router.id, internetDeviceId())) {
@@ -193,7 +193,7 @@ export function diagnoseDevice(state: GameState, deviceId: string): DeviceDiagno
     steps.push(fail("dns", "DNSサーバーが設定されていません。"));
     return finish(9);
   }
-  steps.push(ok("dns"));
+  steps.push(ok("dns", resolved.dns));
 
   // 11. Internet
   steps.push(ok("internet"));

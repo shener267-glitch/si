@@ -3,7 +3,7 @@ import { cableLengthMeters } from "./cables";
 import { DEVICE_CATALOG, iconFor, shortLabel } from "./devices";
 import { diagnoseDevice, ping, runCommunicationTest } from "./diagnostics";
 import { currentMission, MISSIONS } from "./missions";
-import { isValidIp } from "./netutils";
+import { isValidIp, resolveAllConfigs } from "./netutils";
 import {
   OFFICE_SIZE,
   buyDevice,
@@ -542,14 +542,24 @@ export class App {
     }
 
     const cfg = (device.networkConfig as ClientConfig) ?? { dhcpEnabled: true };
+    const resolved = resolveAllConfigs(this.state).get(device.id);
+    const dhcpStatusHtml = resolved?.ip
+      ? `
+        <div class="dhcp-status-row"><span>IPアドレス</span><span>${resolved.ip}</span></div>
+        <div class="dhcp-status-row"><span>サブネットマスク</span><span>${resolved.subnetMask ?? "-"}</span></div>
+        <div class="dhcp-status-row"><span>デフォルトゲートウェイ</span><span>${resolved.gateway ?? "-"}</span></div>
+        <div class="dhcp-status-row"><span>DNS</span><span>${resolved.dns ?? "-"}</span></div>
+      `
+      : `<div class="dhcp-status-empty">まだIPアドレスを取得できていません（ルーターまでの配線とDHCP設定を確認してください）。</div>`;
     return `<div class="overlay" data-overlay="settings">
       <div class="sheet">
         <div class="sheet-header"><h2>⚙ ${device.name} の設定</h2><button class="close-btn" data-close="settings">✕</button></div>
         <form id="settings-form" class="settings-form">
           <label class="field field--checkbox">
-            <input name="dhcpEnabled" type="checkbox" ${cfg.dhcpEnabled ? "checked" : ""} data-toggle="manual-fields" data-invert="1" />
+            <input name="dhcpEnabled" type="checkbox" ${cfg.dhcpEnabled ? "checked" : ""} data-toggle="manual-fields" data-invert="1" data-toggle-show="dhcp-status" />
             <span>IPアドレスを自動取得する（DHCP）</span>
           </label>
+          <div class="dhcp-status" ${cfg.dhcpEnabled ? "" : "hidden"}>${dhcpStatusHtml}</div>
           <div class="manual-fields" ${cfg.dhcpEnabled ? "hidden" : ""}>
             <label class="field">
               <span>IPアドレス</span>
@@ -938,6 +948,15 @@ export class App {
         const invert = checkbox.dataset.invert === "1";
         const show = invert ? !checkbox.checked : checkbox.checked;
         container.hidden = !show;
+      });
+    });
+
+    // Same checkbox can also show/hide a second, non-inverted container (e.g. the
+    // DHCP checkbox reveals "manual-fields" when off and "dhcp-status" when on).
+    this.root.querySelectorAll<HTMLInputElement>("[data-toggle-show]").forEach((checkbox) => {
+      checkbox.addEventListener("change", () => {
+        const container = this.root.querySelector<HTMLElement>(`.${checkbox.dataset.toggleShow!}`);
+        if (container) container.hidden = !checkbox.checked;
       });
     });
 
