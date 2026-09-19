@@ -1,6 +1,7 @@
 import { catalogItem, createDevice, shortLabel } from "./devices";
 import { DEFAULT_ROOMS } from "./rooms";
 import { validatePhysicalConnection } from "./rules";
+import { isComputerType } from "./types";
 import type { ClientConfig, Connection, Device, DeviceType, GameState, RouterConfig } from "./types";
 
 const OFFICE_WIDTH = 640;
@@ -167,7 +168,7 @@ export function updateClientConfig(
   patch: Partial<ClientConfig>
 ): void {
   const device = deviceById(state, deviceId);
-  if (!device || (device.type !== "pc" && device.type !== "server")) return;
+  if (!device || (!isComputerType(device.type) && device.type !== "server")) return;
   const current = (device.networkConfig as ClientConfig) ?? { dhcpEnabled: true };
   device.networkConfig = { ...current, ...patch };
 }

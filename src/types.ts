@@ -1,5 +1,7 @@
 export type DeviceType =
-  | "pc"
+  | "desktop_pc"
+  | "notebook_pc"
+  | "workstation"
   | "server"
   | "router"
   | "switch4"
@@ -10,6 +12,16 @@ export type DeviceType =
   | "patch_panel"
   | "rack"
   | "internet";
+
+/** The 3 computer types introduced in v5 (design doc §3/§17) - client devices a user sits at. */
+export const COMPUTER_TYPES: DeviceType[] = ["desktop_pc", "notebook_pc", "workstation"];
+
+export function isComputerType(type: DeviceType): boolean {
+  return COMPUTER_TYPES.includes(type);
+}
+
+/** Shop grouping (design doc §25). */
+export type DeviceCategory = "computer" | "server" | "network" | "wiring";
 
 export type PortType = "WAN" | "LAN" | "ETHERNET" | "WIFI";
 
@@ -23,11 +35,14 @@ export interface Port {
 
 export interface DeviceCatalogItem {
   type: DeviceType;
+  category: DeviceCategory;
   label: string;
   price: number;
   icon: string;
   description: string;
   ports: Array<Pick<Port, "type" | "capacity">>;
+  /** Display-only spec sheet for the shop's device-comparison table (design doc §15). */
+  specs?: Record<string, string>;
 }
 
 /** Router-side LAN configuration (also carries WAN uplink / NAT toggle). */
