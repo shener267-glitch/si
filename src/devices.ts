@@ -65,6 +65,22 @@ export const DEVICE_CATALOG: DeviceCatalogItem[] = [
     description: "有線LANを無線化する。複数台が同時接続できる。",
     ports: [{ type: "ETHERNET" }, { type: "WIFI", capacity: null }],
   },
+  {
+    type: "lan_jack",
+    label: "LANコンセント",
+    price: 5_000,
+    icon: "🔌",
+    description: "壁に設置する情報コンセント。片側にPCなど、反対側にパッチパネルをつなぐ。",
+    ports: [{ type: "ETHERNET" }, { type: "ETHERNET" }],
+  },
+  {
+    type: "patch_panel",
+    label: "パッチパネル",
+    price: 40_000,
+    icon: "🗄️",
+    description: "通信室でLANコンセントの配線をまとめ、スイッチへ引き渡す。",
+    ports: Array.from({ length: 8 }, () => ({ type: "ETHERNET" as const })),
+  },
 ];
 
 export const INTERNET_ICON = "☁️";
@@ -90,10 +106,16 @@ export function shortLabel(type: DeviceType): string {
       return "ONU";
     case "wifi":
       return "AP";
+    case "lan_jack":
+      return "Jack";
+    case "patch_panel":
+      return "Patch";
     case "internet":
       return "Internet";
   }
 }
+
+const POWERED_TYPES: DeviceType[] = ["router", "switch4", "switch8", "onu", "wifi"];
 
 export function iconFor(type: DeviceType): string {
   if (type === "internet") return INTERNET_ICON;
@@ -144,6 +166,9 @@ export function createDevice(
     device.networkConfig = defaultRouterConfig();
   } else if (type === "pc" || type === "server") {
     device.networkConfig = defaultClientConfig(type);
+  }
+  if (POWERED_TYPES.includes(type)) {
+    device.power = "on";
   }
   return device;
 }

@@ -1,5 +1,5 @@
 import { diagnoseDevice } from "./diagnostics";
-import { resolveAllConfigs } from "./netutils";
+import { findL2Domain, resolveAllConfigs, shortestPathDevices } from "./netutils";
 import { connectionsOf } from "./state";
 import type { ClientConfig, GameState, Mission } from "./types";
 
@@ -105,6 +105,52 @@ export const MISSIONS: Mission[] = [
       return serverOnline
         ? { ok: true }
         : { ok: false, detail: "固定IPで正常に通信できるサーバーがまだありません。" };
+    },
+  },
+  {
+    id: "m6",
+    title: "ミッション06",
+    description: "部屋のLANコンセントにPCをつなぎ、パッチパネル経由でスイッチへ配線せよ",
+    reward: 150_000,
+    check: (state) => {
+      const wired = state.devices.some((d) => {
+        if ((d.type !== "pc" && d.type !== "server") || d.x === null) return false;
+        if (!diagnoseDevice(state, d.id).success) return false;
+        const domain = findL2Domain(state, d.id);
+        if (!domain.router) return false;
+        const path = shortestPathDevices(state, d.id, domain.router.id);
+        if (!path) return false;
+        return path.some((p) => p.type === "lan_jack") && path.some((p) => p.type === "patch_panel");
+      });
+      return wired
+        ? { ok: true }
+        : {
+            ok: false,
+            detail: "LANコンセント→パッチパネル→スイッチの経路でインターネットに到達している機器がまだありません。",
+          };
+    },
+  },
+  {
+    id: "m7",
+    title: "ミッション07",
+    description: "倉庫にPCを設置し、通信室まで正しく配線せよ（直線では100mを超えるため中継が必要）",
+    reward: 200_000,
+    check: (state) => {
+      const warehouse = state.rooms.find((r) => r.id === "warehouse");
+      if (!warehouse) return { ok: false, detail: "倉庫が見つかりません。" };
+      const online = state.devices.some((d) => {
+        if ((d.type !== "pc" && d.type !== "server") || d.x === null || d.y === null) return false;
+        const inWarehouse =
+          d.x >= warehouse.x &&
+          d.x <= warehouse.x + warehouse.width &&
+          d.y >= warehouse.y &&
+          d.y <= warehouse.y + warehouse.height;
+        if (!inWarehouse) return false;
+        return diagnoseDevice(state, d.id).success;
+      });
+      return online
+        ? { ok: true }
+        : { ok: false, detail: "倉庫内のPC・サーバーがまだインターネットに接続できていません。" };
     },
   },
 ];

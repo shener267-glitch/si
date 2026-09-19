@@ -1,5 +1,5 @@
 import { deviceById, neighborsOf } from "./state";
-import type { ClientConfig, Device, GameState, RouterConfig } from "./types";
+import type { ClientConfig, Connection, Device, GameState, RouterConfig } from "./types";
 
 export function ipToInt(ip: string | undefined): number | null {
   if (!ip) return null;
@@ -95,6 +95,42 @@ export function routerReachesInternet(state: GameState, routerId: string, intern
     }
   }
   return false;
+}
+
+/** Shortest hop-by-hop path between two devices (BFS), or null if unreachable. */
+export function shortestPathDevices(
+  state: GameState,
+  fromId: string,
+  toId: string
+): Device[] | null {
+  const start = deviceById(state, fromId);
+  if (!start) return null;
+  if (fromId === toId) return [start];
+  const visited = new Set<string>([fromId]);
+  const queue: Device[][] = [[start]];
+  while (queue.length) {
+    const path = queue.shift()!;
+    const last = path[path.length - 1];
+    for (const neighbor of neighborsOf(state, last.id)) {
+      if (visited.has(neighbor.id)) continue;
+      visited.add(neighbor.id);
+      const nextPath = [...path, neighbor];
+      if (neighbor.id === toId) return nextPath;
+      queue.push(nextPath);
+    }
+  }
+  return null;
+}
+
+export function findConnectionBetween(
+  state: GameState,
+  aId: string,
+  bId: string
+): Connection | undefined {
+  return state.connections.find(
+    (c) =>
+      (c.fromDevice === aId && c.toDevice === bId) || (c.fromDevice === bId && c.toDevice === aId)
+  );
 }
 
 export interface ResolvedConfig {

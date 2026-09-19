@@ -6,6 +6,8 @@ export type DeviceType =
   | "switch8"
   | "onu"
   | "wifi"
+  | "lan_jack"
+  | "patch_panel"
   | "internet";
 
 export type PortType = "WAN" | "LAN" | "ETHERNET" | "WIFI";
@@ -57,6 +59,8 @@ export interface Device {
   price: number;
   ports: Port[];
   networkConfig?: NetworkConfig;
+  /** Only meaningful for powered infra (router/switch/onu/wifi). */
+  power?: "on" | "off";
 }
 
 export interface Connection {
@@ -66,6 +70,15 @@ export interface Connection {
   toDevice: string;
   toPort: string;
   kind: "ethernet" | "wifi";
+}
+
+export interface Room {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export type GameMode = "idle" | "placing" | "moving" | "connecting" | "settings" | "diagnosing";
@@ -85,6 +98,7 @@ export interface GameState {
   money: number;
   devices: Device[];
   connections: Connection[];
+  rooms: Room[];
   missionIndex: number;
   missionCleared: Record<string, boolean>;
   mode: GameMode;
@@ -96,6 +110,8 @@ export interface GameState {
 
 export type DiagStepKey =
   | "physical"
+  | "power"
+  | "cable"
   | "port"
   | "ip"
   | "subnet"

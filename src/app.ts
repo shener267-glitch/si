@@ -1,3 +1,4 @@
+import { cableLengthMeters } from "./cables";
 import { DEVICE_CATALOG, iconFor } from "./devices";
 import { diagnoseDevice, ping, runCommunicationTest } from "./diagnostics";
 import { currentMission, MISSIONS } from "./missions";
@@ -7,11 +8,13 @@ import {
   buyDevice,
   connectDevices,
   deviceById,
+  disconnectCable,
   moveDevice,
   placeDevice,
   placedDevices,
   portUsageCount,
   resetState,
+  togglePower,
   unplacedDevices,
   updateClientConfig,
   updateRouterConfig,
@@ -120,9 +123,19 @@ export class App {
     this.render();
   }
 
+  private static readonly SETTINGS_TYPES: DeviceType[] = [
+    "router",
+    "pc",
+    "server",
+    "switch4",
+    "switch8",
+    "onu",
+    "wifi",
+  ];
+
   private openDeviceAction(device: Device) {
     if (this.state.mode === "settings") {
-      if (device.type === "router" || device.type === "pc" || device.type === "server") {
+      if (App.SETTINGS_TYPES.includes(device.type)) {
         this.ui.settingsDeviceId = device.id;
         this.ui.showSettings = true;
         this.render();
@@ -143,12 +156,32 @@ export class App {
     }
   }
 
+  private handleCableTap(connId: string) {
+    const conn = this.state.connections.find((c) => c.id === connId);
+    if (!conn) return;
+    const a = deviceById(this.state, conn.fromDevice);
+    const b = deviceById(this.state, conn.toDevice);
+    const label = a && b ? `${a.name} ↔ ${b.name}` : "このケーブル";
+    if (!window.confirm(`${label} のケーブルを切断しますか？`)) return;
+    disconnectCable(this.state, connId);
+    this.setToast("ケーブルを切断しました。");
+    this.render();
+  }
+
   private handleOfficeClick(evt: MouseEvent, officeEl: HTMLElement) {
     const target = evt.target as HTMLElement;
     const deviceEl = target.closest<HTMLElement>("[data-device-id]");
     const rect = officeEl.getBoundingClientRect();
     const x = evt.clientX - rect.left;
     const y = evt.clientY - rect.top;
+
+    if (this.state.mode === "connecting") {
+      const cableEl = target.closest<HTMLElement>("[data-conn-id]");
+      if (cableEl) {
+        this.handleCableTap(cableEl.dataset.connId!);
+        return;
+      }
+    }
 
     if (this.state.mode === "placing") {
       if (!this.state.selectedDeviceId) return;
@@ -323,14 +356,14 @@ export class App {
           : "移動したい機器をタップしてください。";
       case "connecting":
         return this.state.connectFromId
-          ? "つなぎたい機器（B）をタップしてください。"
-          : "つなぎたい機器（A）をタップしてください。";
+          ? "つなぎたい機器（B）をタップしてください。ケーブルをタップすると切断できます。"
+          : "つなぎたい機器（A）をタップしてください。ケーブルをタップすると切断できます。";
       case "settings":
-        return "設定したい機器（ルーター／PC／サーバー）をタップしてください。";
+        return "設定したい機器（ルーター／スイッチ／ONU／AP／PC／サーバー）をタップしてください。";
       case "diagnosing":
         return "診断したいPCまたはサーバーをタップしてください。";
       default:
-        return "🛒購入・🖐移動・🔌接続・⚙設定・🔍診断・▶テストで操作しよう。";
+        return "🛒購入・🖐移動・🔌配線・⚙設定・🔍診断・▶テストで操作しよう。";
     }
   }
 
@@ -349,6 +382,17 @@ export class App {
       .join("");
   }
 
+  private renderRooms(): string {
+    return this.state.rooms
+      .map(
+        (r) =>
+          `<div class="room" style="left:${r.x}px;top:${r.y}px;width:${r.width}px;height:${r.height}px">
+            <span class="room-label">${r.name}</span>
+          </div>`
+      )
+      .join("");
+  }
+
   private renderCables(): string {
     const devices = placedDevices(this.state);
     const byId = new Map(devices.map((d) => [d.id, d]));
@@ -356,10 +400,12 @@ export class App {
       .map((c) => {
         const a = byId.get(c.fromDevice);
         const b = byId.get(c.toDevice);
-        if (!a || !b) return "";
-        return `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" class="cable ${
-          c.kind === "wifi" ? "cable--wifi" : ""
-        }" />`;
+        if (!a || !b || a.x === null || a.y === null || b.x === null || b.y === null) return "";
+        const tooLong = cableLengthMeters(a.x, a.y, b.x, b.y) > 100;
+        return `<line data-conn-id="${c.id}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" class="cable-hit" />
+          <line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" class="cable ${
+            c.kind === "wifi" ? "cable--wifi" : ""
+          } ${tooLong ? "cable--too-long" : ""}" />`;
       })
       .join("");
   }
@@ -410,10 +456,29 @@ export class App {
     </div>`;
   }
 
+  private renderPowerToggle(device: Device): string {
+    if (device.power === undefined) return "";
+    return `<label class="field field--checkbox">
+      <input type="checkbox" ${device.power === "on" ? "checked" : ""} data-power-toggle="${device.id}" />
+      <span>⚡ 電源を入れる</span>
+    </label>`;
+  }
+
   private renderSettings(): string {
     if (!this.ui.showSettings || !this.ui.settingsDeviceId) return "";
     const device = deviceById(this.state, this.ui.settingsDeviceId);
     if (!device) return "";
+
+    if (device.type === "switch4" || device.type === "switch8" || device.type === "onu" || device.type === "wifi") {
+      return `<div class="overlay" data-overlay="settings">
+        <div class="sheet">
+          <div class="sheet-header"><h2>⚙ ${device.name} の設定</h2><button class="close-btn" data-close="settings">✕</button></div>
+          <form class="settings-form">
+            ${this.renderPowerToggle(device)}
+          </form>
+        </div>
+      </div>`;
+    }
 
     if (device.type === "router") {
       const cfg = device.networkConfig as RouterConfig;
@@ -421,6 +486,7 @@ export class App {
         <div class="sheet">
           <div class="sheet-header"><h2>⚙ ${device.name} の設定</h2><button class="close-btn" data-close="settings">✕</button></div>
           <form id="settings-form" class="settings-form">
+            ${this.renderPowerToggle(device)}
             <label class="field">
               <span>ルーターのIPアドレス（ゲートウェイ）</span>
               <input name="lanIp" type="text" value="${cfg.lanIp}" placeholder="192.168.1.1" />
@@ -568,12 +634,23 @@ export class App {
     if (!this.ui.showClear) return "";
     const mission = currentMission(this.state);
     const hasNext = this.state.missionIndex < MISSIONS.length - 1;
+    const totalCableLength = this.state.connections.reduce((sum, c) => {
+      const a = deviceById(this.state, c.fromDevice);
+      const b = deviceById(this.state, c.toDevice);
+      if (!a || !b || a.x === null || a.y === null || b.x === null || b.y === null) return sum;
+      return sum + cableLengthMeters(a.x, a.y, b.x, b.y);
+    }, 0);
+    const totalSpent = this.state.devices
+      .filter((d) => d.type !== "internet")
+      .reduce((sum, d) => sum + d.price, 0);
     return `<div class="overlay" data-overlay="clear">
       <div class="clear-screen">
         <div class="clear-title">🎉 MISSION COMPLETE!</div>
         <div class="clear-sub">${mission.title}：クリア！</div>
         <div class="clear-stats">
           <div>報酬：${money(mission.reward)}</div>
+          <div>配線距離：${totalCableLength.toFixed(1)}m</div>
+          <div>施工コスト：${money(totalSpent)}</div>
         </div>
         ${
           hasNext
@@ -602,6 +679,7 @@ export class App {
 
         <main class="office-wrap">
           <div class="office" id="office">
+            ${this.renderRooms()}
             <svg class="cables-layer" viewBox="0 0 ${OFFICE_SIZE.width} ${OFFICE_SIZE.height}">
               ${this.renderCables()}
             </svg>
@@ -614,7 +692,7 @@ export class App {
         <footer class="bottom-nav">
           <button class="nav-btn" data-shop="1"><span class="nav-icon">🛒</span><span class="nav-label">購入</span></button>
           <button class="nav-btn ${s.mode === "moving" ? "nav-btn--active" : ""}" data-mode="moving"><span class="nav-icon">🖐</span><span class="nav-label">移動</span></button>
-          <button class="nav-btn ${s.mode === "connecting" ? "nav-btn--active" : ""}" data-mode="connecting"><span class="nav-icon">🔌</span><span class="nav-label">接続</span></button>
+          <button class="nav-btn ${s.mode === "connecting" ? "nav-btn--active" : ""}" data-mode="connecting"><span class="nav-icon">🔌</span><span class="nav-label">配線</span></button>
           <button class="nav-btn ${s.mode === "settings" ? "nav-btn--active" : ""}" data-mode="settings"><span class="nav-icon">⚙</span><span class="nav-label">設定</span></button>
           <button class="nav-btn ${s.mode === "diagnosing" ? "nav-btn--active" : ""}" data-mode="diagnosing"><span class="nav-icon">🔍</span><span class="nav-label">診断</span></button>
           <button class="nav-btn" data-test="1"><span class="nav-icon">▶</span><span class="nav-label">テスト</span></button>
@@ -707,5 +785,12 @@ export class App {
     });
 
     this.root.querySelector<HTMLElement>("[data-ping]")?.addEventListener("click", () => this.handleRunPing());
+
+    this.root.querySelectorAll<HTMLInputElement>("[data-power-toggle]").forEach((checkbox) => {
+      checkbox.addEventListener("change", () => {
+        togglePower(this.state, checkbox.dataset.powerToggle!);
+        this.render();
+      });
+    });
   }
 }

@@ -1,9 +1,10 @@
 import { catalogItem, createDevice, shortLabel } from "./devices";
+import { DEFAULT_ROOMS } from "./rooms";
 import { validatePhysicalConnection } from "./rules";
 import type { ClientConfig, Connection, Device, DeviceType, GameState, RouterConfig } from "./types";
 
 const OFFICE_WIDTH = 640;
-const OFFICE_HEIGHT = 900;
+const OFFICE_HEIGHT = 1100;
 const INTERNET_ID = "internet-0";
 
 export const OFFICE_SIZE = { width: OFFICE_WIDTH, height: OFFICE_HEIGHT };
@@ -17,6 +18,7 @@ export function createInitialState(): GameState {
     money: STARTING_MONEY,
     devices: [internet],
     connections: [],
+    rooms: DEFAULT_ROOMS,
     missionIndex: 0,
     missionCleared: {},
     mode: "idle",
@@ -31,9 +33,11 @@ export function internetDeviceId(): string {
   return INTERNET_ID;
 }
 
-function nextSeq(state: GameState, type: DeviceType): number {
-  const n = (state.nextDeviceSeq[type] ?? 0) + 1;
-  state.nextDeviceSeq[type] = n;
+// Sequence numbers are counted per display label (e.g. "Switch"), not per exact
+// DeviceType, so a 4-port and an 8-port switch don't both end up "Switch-01".
+function nextSeq(state: GameState, label: string): number {
+  const n = (state.nextDeviceSeq[label] ?? 0) + 1;
+  state.nextDeviceSeq[label] = n;
   return n;
 }
 
@@ -42,9 +46,10 @@ export function buyDevice(state: GameState, type: DeviceType): { ok: boolean; re
   if (state.money < item.price) {
     return { ok: false, reason: "所持金が足りません。" };
   }
-  const seq = nextSeq(state, type);
+  const label = shortLabel(type);
+  const seq = nextSeq(state, label);
   const id = `${type}-${seq}-${Date.now().toString(36)}`;
-  const name = `${shortLabel(type)}-${String(seq).padStart(2, "0")}`;
+  const name = `${label}-${String(seq).padStart(2, "0")}`;
   const device = createDevice(type, id, name, item.price);
   state.money -= item.price;
   state.devices.push(device);
@@ -140,6 +145,16 @@ export function setPortStatus(
   const device = deviceById(state, deviceId);
   const port = device?.ports.find((p) => p.id === portId);
   if (port) port.status = status;
+}
+
+export function togglePower(state: GameState, deviceId: string): void {
+  const device = deviceById(state, deviceId);
+  if (!device || device.power === undefined) return;
+  device.power = device.power === "on" ? "off" : "on";
+}
+
+export function disconnectCable(state: GameState, connectionId: string): void {
+  state.connections = state.connections.filter((c) => c.id !== connectionId);
 }
 
 export function updateClientConfig(
