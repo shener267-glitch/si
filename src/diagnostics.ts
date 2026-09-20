@@ -11,6 +11,7 @@ import {
 } from "./netutils";
 import { connectionsOf, internetDeviceId } from "./state";
 import { isComputerType } from "./types";
+import { wifiSignalBetween, wifiSignalLabel } from "./wifi";
 import type {
   ClientConfig,
   DeviceDiagnosis,
@@ -20,6 +21,7 @@ import type {
   PingResult,
   RouterConfig,
 } from "./types";
+import type { WifiSignal } from "./wifi";
 
 const STEP_LABELS: Record<DiagStepKey, string> = {
   physical: "物理接続",
@@ -113,12 +115,27 @@ export function diagnoseDevice(state: GameState, deviceId: string): DeviceDiagno
   }
   steps.push(ok("power"));
 
-  // 3. cable length along the same path (straight-line distance; design doc v3 §12)
+  // 3. cable length (wired hops) / Wi-Fi signal strength (wireless hops), along the
+  // same path. A wireless hop's "medium quality" is its signal strength - distance plus
+  // every room wall the straight-line path crosses (design doc v7 §4-§7) - rather than
+  // the wired 100m cap, so the two share this step but fail with different messages.
   let tooLong: { a: string; b: string; length: number } | null = null;
+  let noSignal: { a: string; b: string; signal: WifiSignal } | null = null;
+  let wifiOkDetail: string | null = null;
   for (let i = 0; i < path.length - 1; i++) {
     const a = path[i];
     const b = path[i + 1];
     if (a.x === null || a.y === null || b.x === null || b.y === null) continue;
+    const link = findConnectionBetween(state, a.id, b.id);
+    if (link?.kind === "wifi") {
+      const signal = wifiSignalBetween(state, a.x, a.y, b.x, b.y);
+      if (signal.category === "圏外") {
+        noSignal = { a: a.name, b: b.name, signal };
+        break;
+      }
+      wifiOkDetail = `Wi-Fi信号強度：${wifiSignalLabel(signal)}`;
+      continue;
+    }
     const length = cableLengthMeters(a.x, a.y, b.x, b.y);
     if (isCableTooLong(length)) {
       tooLong = { a: a.name, b: b.name, length };
@@ -134,7 +151,20 @@ export function diagnoseDevice(state: GameState, deviceId: string): DeviceDiagno
     );
     return finish(2);
   }
-  steps.push(ok("cable"));
+  if (noSignal) {
+    const wallInfo =
+      noSignal.signal.crossedRoomNames.length > 0
+        ? `（${noSignal.signal.crossedRoomNames.join("・")}の壁を通過）`
+        : "";
+    steps.push(
+      fail(
+        "cable",
+        `${noSignal.a} ↔ ${noSignal.b} 間のWi-Fi電波が圏外です${wallInfo}。APとの距離を縮めるか、間の壁を避けて設置しましょう。`
+      )
+    );
+    return finish(2);
+  }
+  steps.push(ok("cable", wifiOkDetail ?? undefined));
 
   // 4. port status along the whole path - a disabled port on EITHER end of any hop
   // (not just this device's own NIC) breaks that link, e.g. a faulted switch port.
