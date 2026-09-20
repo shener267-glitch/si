@@ -4,6 +4,7 @@ import { connectionsOf } from "./state";
 import { generateDnsFaultTicket, generatePortFaultTicket } from "./tickets";
 import { isComputerType } from "./types";
 import type { ClientConfig, GameState, Mission } from "./types";
+import { wifiSignalBetween } from "./wifi";
 
 function onlineComputerCount(state: GameState): number {
   return state.devices.filter(
@@ -283,6 +284,42 @@ export const MISSIONS: Mission[] = [
             ok: false,
             detail:
               "同じVLAN内のPC同士は通信でき、別VLANのPCとは通信できない状態になっていません。ポートのAccess VLAN設定を確認しましょう。",
+          };
+    },
+  },
+  {
+    id: "m11",
+    title: "案件11",
+    description: "会議室2にWi-Fi環境を整備せよ（コンクリート壁のため電波が弱くなりやすい部屋です）",
+    reward: 250_000,
+    client: "あおぞら商事株式会社 総務部",
+    deadline: "納期：4日後",
+    budgetHint: "予算目安：¥100,000",
+    requirements: [
+      "会議室2でノートPCがWi-Fiでインターネットに接続できるようにしてください。",
+      "会議室2はコンクリート壁のため電波が減衰します。電波強度「中」以上を確保してください。",
+    ],
+    check: (state) => {
+      const meeting2 = state.rooms.find((r) => r.id === "meeting2");
+      if (!meeting2) return { ok: false, detail: "会議室2が見つかりません。" };
+      const inMeeting2 = (x: number, y: number) =>
+        x >= meeting2.x && x <= meeting2.x + meeting2.width && y >= meeting2.y && y <= meeting2.y + meeting2.height;
+      const goodSignal = state.devices.some((d) => {
+        if (!isComputerType(d.type) || d.x === null || d.y === null || !inMeeting2(d.x, d.y)) return false;
+        if (!diagnoseDevice(state, d.id).success) return false;
+        const conn = connectionsOf(state, d.id).find((c) => c.kind === "wifi");
+        if (!conn) return false;
+        const peerId = conn.fromDevice === d.id ? conn.toDevice : conn.fromDevice;
+        const peer = state.devices.find((p) => p.id === peerId);
+        if (!peer || peer.x === null || peer.y === null) return false;
+        const signal = wifiSignalBetween(state, peer.x, peer.y, d.x, d.y);
+        return signal.category === "中" || signal.category === "強";
+      });
+      return goodSignal
+        ? { ok: true }
+        : {
+            ok: false,
+            detail: "会議室2内で、電波強度「中」以上のWi-Fi接続ができている機器がまだありません。",
           };
     },
   },

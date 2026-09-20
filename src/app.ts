@@ -36,6 +36,7 @@ import {
 } from "./state";
 import { markTicketInvestigating, openTicketCount, resolveTicket } from "./tickets";
 import { DEFAULT_VLAN_ID, isComputerType } from "./types";
+import { wifiSignalBetween, wifiSignalLabel } from "./wifi";
 import type {
   ClientConfig,
   CurrentStateRow,
@@ -282,6 +283,21 @@ export class App {
     return `Access(VLAN ${port.accessVlan ?? DEFAULT_VLAN_ID})`;
   }
 
+  private wifiSignalRow(device: Device): CurrentStateRow | null {
+    if (device.x === null || device.y === null) return null;
+    const conn = connectionsOf(this.state, device.id).find((c) => c.kind === "wifi");
+    if (!conn) return null;
+    const peerId = conn.fromDevice === device.id ? conn.toDevice : conn.fromDevice;
+    const peer = deviceById(this.state, peerId);
+    if (!peer || peer.x === null || peer.y === null) return null;
+    const signal = wifiSignalBetween(this.state, peer.x, peer.y, device.x, device.y);
+    return {
+      label: "Wi-Fi電波強度",
+      value: wifiSignalLabel(signal),
+      ok: signal.category !== "圏外",
+    };
+  }
+
   private currentStateRows(device: Device): CurrentStateRow[] {
     const rows: CurrentStateRow[] = [];
     if (device.x === null) {
@@ -302,6 +318,8 @@ export class App {
       const diag = diagnoseDevice(this.state, device.id);
       const resolved = resolveAllConfigs(this.state).get(device.id);
       rows.push({ label: "IPアドレス", value: resolved?.ip ?? "未取得", ok: !!resolved?.ip });
+      const wifiRow = this.wifiSignalRow(device);
+      if (wifiRow) rows.push(wifiRow);
       const firstFail = diag.steps.find((s) => s.status === "fail");
       rows.push({
         label: "通信状態",
@@ -1125,7 +1143,9 @@ export class App {
         let cableInfo = "接続先の情報が取得できません。";
         if (other && device.x !== null && device.y !== null && other.x !== null && other.y !== null) {
           if (conn.kind === "wifi") {
-            cableInfo = "種類：無線（Wi-Fi）";
+            const signal = wifiSignalBetween(this.state, device.x, device.y, other.x, other.y);
+            const wallInfo = signal.crossedRoomNames.length > 0 ? `（${signal.crossedRoomNames.join("・")}の壁を通過）` : "";
+            cableInfo = `種類：無線（Wi-Fi） / 電波強度：${wifiSignalLabel(signal)}${wallInfo}`;
           } else {
             const len = cableLengthMeters(device.x, device.y, other.x, other.y);
             cableInfo = `規格：Cat6 / 長さ：${len.toFixed(1)}m${isCableTooLong(len) ? "（上限オーバー）" : ""}`;

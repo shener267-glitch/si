@@ -111,6 +111,11 @@ export interface Connection {
   kind: "ethernet" | "wifi";
 }
 
+/** The room's enclosing wall (design doc v7 §3/§5) - one material per room rather than
+ * per individual wall segment, a deliberate simplification: it still makes the building
+ * genuinely affect Wi-Fi (design doc v7 §4), just without full wall-segment geometry. */
+export type WallMaterial = "gypsum" | "wood" | "glass" | "concrete" | "thick_concrete";
+
 export interface Room {
   id: string;
   name: string;
@@ -118,6 +123,7 @@ export interface Room {
   y: number;
   width: number;
   height: number;
+  wallMaterial: WallMaterial;
 }
 
 export type GameMode = "idle" | "placing" | "moving" | "connecting" | "settings" | "diagnosing";
