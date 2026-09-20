@@ -138,12 +138,44 @@ export interface Mission {
   onActivate?: (state: GameState) => void;
 }
 
+/** A member of the company roster (design doc v6.1 §3/§4) - flavors tickets with a
+ * real requester. Not tied to accounts/email/permissions, which are deferred. */
+export interface Employee {
+  id: string;
+  name: string;
+  department: string;
+  position: string;
+}
+
+export type TicketPriority = "緊急" | "高" | "中" | "低";
+
+/** Simplified from the design doc's 6-state lifecycle (§18) to 3 states for this first
+ * pass: 未対応 (new) → 調査中 (opened at least once) → 解決 (fixed and closed together). */
+export type TicketStatus = "未対応" | "調査中" | "解決";
+
+/** A helpdesk ticket (design doc v6.1 §17/§18) - names a real employee and, when the
+ * problem is a network fault, a real device the player can go diagnose and fix using
+ * the existing diagnostics/settings systems (design doc v6.1 principle 7: reuse rather
+ * than build new). */
+export interface Ticket {
+  id: string;
+  employeeId: string;
+  subject: string;
+  description: string;
+  priority: TicketPriority;
+  status: TicketStatus;
+  relatedDeviceId: string | null;
+  reward: number;
+}
+
 export interface GameState {
   money: number;
   devices: Device[];
   connections: Connection[];
   rooms: Room[];
   vlans: Vlan[];
+  tickets: Ticket[];
+  nextTicketSeq: number;
   missionIndex: number;
   missionCleared: Record<string, boolean>;
   mode: GameMode;

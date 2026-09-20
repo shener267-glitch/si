@@ -1,6 +1,7 @@
 import { diagnoseDevice } from "./diagnostics";
 import { findL2Domain, findVlanDomain, resolveAllConfigs, shortestPathDevices } from "./netutils";
 import { connectionsOf } from "./state";
+import { generateDnsFaultTicket, generatePortFaultTicket } from "./tickets";
 import { isComputerType } from "./types";
 import type { ClientConfig, GameState, Mission } from "./types";
 
@@ -122,6 +123,17 @@ export const MISSIONS: Mission[] = [
     deadline: "納期：4日後",
     budgetHint: "予算目安：¥400,000",
     requirements: ["社内サーバーを設置してください。", "サーバーには固定IPを割り当ててください。"],
+    onActivate: (state) => {
+      // First helpdesk ticket (design doc v6.1 §17) - a real employee reports a real,
+      // independently-diagnosable fault on an already-working device.
+      generateDnsFaultTicket(
+        state,
+        "emp-tanaka",
+        "サイト名で社内システムに繋がりません",
+        "IPアドレスへの通信はできるのに、サイト名でアクセスしようとすると失敗するとのことです。",
+        "中"
+      );
+    },
     check: (state) => {
       const serverOnline = state.devices.some((d) => {
         if (d.type !== "server" || d.x === null) return false;
@@ -203,6 +215,15 @@ export const MISSIONS: Mission[] = [
       "会議室ではケーブルを引きにくいので、Wi-Fiで対応してほしいとのことです。",
       "ノートPCが無線でインターネットに接続できることを確認してください。",
     ],
+    onActivate: (state) => {
+      generatePortFaultTicket(
+        state,
+        "emp-watanabe",
+        "PCがネットワークに繋がりません",
+        "今朝からインターネットにもファイルサーバーにも繋がらないとのことです。ケーブルは挿さっているようです。",
+        "高"
+      );
+    },
     check: (state) => {
       const wifiOnline = state.devices.some((d) => {
         if ((!isComputerType(d.type) && d.type !== "server") || d.x === null) return false;
