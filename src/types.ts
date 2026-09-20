@@ -116,14 +116,23 @@ export interface Connection {
  * genuinely affect Wi-Fi (design doc v7 §4), just without full wall-segment geometry. */
 export type WallMaterial = "gypsum" | "wood" | "glass" | "concrete" | "thick_concrete";
 
+/** The room's floor covering (design doc v7.1 §7) - a CSS-level texture/tone
+ * distinction, not simulated underfloor cabling (OA floor raised-cabling is deferred). */
+export type FloorFinish = "carpet" | "tile" | "oa_floor" | "waterproof" | "plain";
+
 export interface Room {
   id: string;
   name: string;
+  /** Which building/floor this room belongs to, for display only in this pass (design
+   * doc v7.1 §3/§17) - e.g. "本庁舎 1F", "別館". Rooms still share one flat map canvas;
+   * a genuinely separate second building layout is deferred (see README). */
+  building: string;
   x: number;
   y: number;
   width: number;
   height: number;
   wallMaterial: WallMaterial;
+  floorFinish: FloorFinish;
 }
 
 export type GameMode = "idle" | "placing" | "moving" | "connecting" | "settings" | "diagnosing";

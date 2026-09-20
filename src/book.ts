@@ -270,9 +270,9 @@ export const BOOK_CATEGORIES: BookCategory[] = [
         title: "VLANとは",
         icon: "🏷️",
         what: "同じスイッチ・同じ配線につながっていても、論理的にネットワークを分離できる仕組み。",
-        reality: "1台のスイッチに営業部と開発部のPCが混在していても、VLANで分ければお互いに通信できなくなる。",
+        reality: "1台のスイッチに住民課と健康福祉課のPCが混在していても、VLANで分ければお互いに通信できなくなる。",
         inGame: "スイッチの⚙設定で各ポートにVLAN IDを割り当てる。同じVLANのポート同士だけが通信できる。",
-        example: "Switch\n  ├ Port1-3: VLAN10（営業）\n  └ Port4-6: VLAN20（開発）",
+        example: "Switch\n  ├ Port1-3: VLAN10（住民課）\n  └ Port4-6: VLAN20（健康福祉）",
         practiceMode: "settings",
       },
       {
@@ -291,7 +291,7 @@ export const BOOK_CATEGORIES: BookCategory[] = [
         what: "1つのVLANだけに所属するポート。PCなどの末端機器を接続するために使う。",
         reality: "PCを挿すポートは通常Accessポートで、そのポートのVLANにPCが所属することになる。",
         inGame: "スイッチの⚙設定でポートのモードをAccessにし、VLANを1つ選ぶ。",
-        example: "Port1：Access / VLAN10（営業）",
+        example: "Port1：Access / VLAN10（住民課）",
         practiceMode: "settings",
       },
       {

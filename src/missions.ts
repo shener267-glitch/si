@@ -27,7 +27,7 @@ export const MISSIONS: Mission[] = [
     title: "案件01",
     description: "1台のPCをインターネットに接続せよ（ONU・ルーターが必要）",
     reward: 100_000,
-    client: "あおぞら商事株式会社",
+    client: "○○村役場",
     deadline: "納期：3日後",
     budgetHint: "予算目安：¥300,000",
     requirements: ["PCを1台、インターネットに接続できるようにしてください。"],
@@ -43,7 +43,7 @@ export const MISSIONS: Mission[] = [
     title: "案件02",
     description: "5台のPCを接続せよ（ルーターのLANポートだけでは足りません）",
     reward: 150_000,
-    client: "あおぞら商事株式会社",
+    client: "○○村役場",
     deadline: "納期：5日後",
     budgetHint: "予算目安：¥800,000",
     requirements: [
@@ -62,7 +62,7 @@ export const MISSIONS: Mission[] = [
     title: "案件03",
     description: "PCのIPアドレスを手動設定し、正しく通信できるようにせよ",
     reward: 100_000,
-    client: "あおぞら商事株式会社 総務部",
+    client: "○○村役場 財政課",
     deadline: "納期：2日後",
     budgetHint: "予算目安：¥150,000",
     requirements: ["特定の1台には固定のIPアドレスを割り当ててください（社内システムの都合です）。"],
@@ -83,7 +83,7 @@ export const MISSIONS: Mission[] = [
     title: "案件04",
     description: "故障したPCを復旧せよ",
     reward: 150_000,
-    client: "あおぞら商事株式会社",
+    client: "○○村役場",
     deadline: "至急対応",
     budgetHint: "追加予算：¥50,000",
     requirements: [
@@ -120,7 +120,7 @@ export const MISSIONS: Mission[] = [
     title: "案件05",
     description: "社内サーバーを設置し、固定IPで正しく接続せよ",
     reward: 200_000,
-    client: "あおぞら商事株式会社 情報システム部",
+    client: "○○村役場 総務課",
     deadline: "納期：4日後",
     budgetHint: "予算目安：¥400,000",
     requirements: ["社内サーバーを設置してください。", "サーバーには固定IPを割り当ててください。"],
@@ -152,7 +152,7 @@ export const MISSIONS: Mission[] = [
     title: "案件06",
     description: "部屋のLANコンセントにPCをつなぎ、パッチパネル経由でスイッチへ配線せよ",
     reward: 150_000,
-    client: "あおぞら商事株式会社 総務部",
+    client: "○○村役場 財政課",
     deadline: "納期：3日後",
     budgetHint: "予算目安：¥100,000",
     requirements: [
@@ -182,7 +182,7 @@ export const MISSIONS: Mission[] = [
     title: "案件07",
     description: "倉庫にPCを設置し、通信室まで正しく配線せよ（直線では100mを超えるため中継が必要）",
     reward: 200_000,
-    client: "あおぞら商事株式会社 物流部",
+    client: "○○村役場 産業課",
     deadline: "納期：5日後",
     budgetHint: "予算目安：¥250,000",
     requirements: ["倉庫にもネットワークを届けてください。", "配線1本の長さは上限（100m）を超えないようにしてください。"],
@@ -209,7 +209,7 @@ export const MISSIONS: Mission[] = [
     title: "案件08",
     description: "会議室にWi-Fiアクセスポイントを設置し、無線で通信できるようにせよ",
     reward: 150_000,
-    client: "あおぞら商事株式会社 営業部",
+    client: "○○村役場 住民課",
     deadline: "納期：3日後",
     budgetHint: "予算目安：¥150,000",
     requirements: [
@@ -239,9 +239,9 @@ export const MISSIONS: Mission[] = [
   {
     id: "m9",
     title: "案件09",
-    description: "設計部にワークステーションを導入し、正しく通信できるようにせよ",
+    description: "建設課にワークステーションを導入し、正しく通信できるようにせよ",
     reward: 250_000,
-    client: "あおぞら商事株式会社 設計部",
+    client: "○○村役場 建設課",
     deadline: "納期：4日後",
     budgetHint: "予算目安：¥450,000",
     requirements: [
@@ -260,15 +260,15 @@ export const MISSIONS: Mission[] = [
   {
     id: "m10",
     title: "案件10",
-    description: "新オフィスに営業部と開発部を収容してください。VLANで部署ごとにネットワークを分離する必要があります",
+    description: "住民課と健康福祉課を同じスイッチに収容してください。VLANで課ごとにネットワークを分離する必要があります",
     reward: 300_000,
-    client: "あおぞら商事株式会社 情報システム部",
+    client: "○○村役場 総務課",
     deadline: "納期：5日後",
     budgetHint: "予算目安：¥200,000",
     requirements: [
-      "同じスイッチに営業部・開発部それぞれのPCを接続してください。",
-      "同じ部署内のPC同士は通信できるようにしてください。",
-      "異なる部署のPC同士は通信できないよう、VLANで分離してください。",
+      "同じスイッチに住民課・健康福祉課それぞれのPCを接続してください。",
+      "同じ課内のPC同士は通信できるようにしてください。",
+      "異なる課のPC同士は通信できないよう、VLANで分離してください。",
     ],
     check: (state) => {
       const pcs = state.devices.filter((d) => isComputerType(d.type) && d.x !== null);
@@ -292,7 +292,7 @@ export const MISSIONS: Mission[] = [
     title: "案件11",
     description: "会議室2にWi-Fi環境を整備せよ（コンクリート壁のため電波が弱くなりやすい部屋です）",
     reward: 250_000,
-    client: "あおぞら商事株式会社 総務部",
+    client: "○○村役場 総務課",
     deadline: "納期：4日後",
     budgetHint: "予算目安：¥100,000",
     requirements: [
