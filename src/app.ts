@@ -10,6 +10,7 @@ import {
   shortLabel,
 } from "./devices";
 import { diagnoseDevice, ping, runCommunicationTest } from "./diagnostics";
+import { employeeById, EMPLOYEES } from "./employees";
 import { currentMission, MISSIONS } from "./missions";
 import { isValidIp, resolveAllConfigs } from "./netutils";
 import {
@@ -33,6 +34,7 @@ import {
   updateRouterConfig,
   upsertVlan,
 } from "./state";
+import { markTicketInvestigating, openTicketCount, resolveTicket } from "./tickets";
 import { DEFAULT_VLAN_ID, isComputerType } from "./types";
 import type {
   ClientConfig,
@@ -59,6 +61,8 @@ interface UiState {
   showInspection: boolean;
   showBook: boolean;
   showJobLetter: boolean;
+  showHelpdesk: boolean;
+  helpdeskTicketId: string | null;
   showInfo: boolean;
   infoTarget: InfoTarget | null;
   showCompareSelect: boolean;
@@ -85,6 +89,8 @@ function initialUi(): UiState {
     showInspection: false,
     showBook: false,
     showJobLetter: false,
+    showHelpdesk: false,
+    helpdeskTicketId: null,
     showInfo: false,
     infoTarget: null,
     showCompareSelect: false,
@@ -430,6 +436,39 @@ export class App {
       this.state.missionIndex += 1;
       const next = MISSIONS[this.state.missionIndex];
       next.onActivate?.(this.state);
+    }
+    this.render();
+  }
+
+  private handleOpenHelpdesk() {
+    this.ui.showHelpdesk = true;
+    this.ui.helpdeskTicketId = null;
+    this.render();
+  }
+
+  private handleOpenTicket(ticketId: string) {
+    markTicketInvestigating(this.state, ticketId);
+    this.ui.helpdeskTicketId = ticketId;
+    this.render();
+  }
+
+  private handleTicketGotoDevice(deviceId: string) {
+    const device = deviceById(this.state, deviceId);
+    if (!device) return;
+    this.ui.showHelpdesk = false;
+    this.state.mode = "diagnosing";
+    this.ui.diagnosisDeviceId = device.id;
+    this.ui.showDiagnosis = true;
+    this.ui.pingResult = null;
+    this.render();
+  }
+
+  private handleResolveTicket(ticketId: string) {
+    const result = resolveTicket(this.state, ticketId);
+    if (result.ok) {
+      this.setToast("チケットを対応完了にしました。");
+    } else {
+      this.setToast(result.reason ?? "対応完了にできません。");
     }
     this.render();
   }
@@ -1133,6 +1172,82 @@ export class App {
     </div>`;
   }
 
+  private renderHelpdesk(): string {
+    if (!this.ui.showHelpdesk) return "";
+    const ticket = this.ui.helpdeskTicketId
+      ? this.state.tickets.find((t) => t.id === this.ui.helpdeskTicketId)
+      : null;
+
+    if (ticket) {
+      const employee = employeeById(ticket.employeeId);
+      const device = ticket.relatedDeviceId ? deviceById(this.state, ticket.relatedDeviceId) : null;
+      const canResolve = ticket.status !== "解決" && (!device || diagnoseDevice(this.state, device.id).success);
+      return `<div class="overlay" data-overlay="helpdesk">
+        <div class="sheet">
+          <button class="book-back" data-helpdesk-back="1">← チケット一覧</button>
+          <div class="sheet-header"><h2>🎫 ${ticket.subject}</h2><button class="close-btn" data-close="helpdesk">✕</button></div>
+          <div class="ticket-detail-meta">
+            <span class="ticket-priority ticket-priority--${ticket.priority}">${ticket.priority}</span>
+            <span class="ticket-status">${ticket.status}</span>
+          </div>
+          <div class="ticket-detail-employee">
+            ${employee ? `${employee.name}さん（${employee.department}・${employee.position}）` : "不明な社員"}からの問い合わせ
+          </div>
+          <div class="ticket-detail-desc">${ticket.description}</div>
+          ${device ? `<div class="ticket-detail-device">対象機器：${device.name}</div>` : ""}
+          ${
+            ticket.status === "解決"
+              ? `<div class="ticket-resolved-banner">✅ 対応完了（報酬 ${money(ticket.reward)} 受領済み）</div>`
+              : `<div class="ticket-detail-actions">
+                  ${
+                    device
+                      ? `<button class="save-btn" data-ticket-goto-device="${device.id}">🔍 現場で確認する</button>`
+                      : ""
+                  }
+                  <button class="save-btn" data-ticket-resolve="${ticket.id}" ${canResolve ? "" : "disabled"}>
+                    対応完了にする
+                  </button>
+                  ${
+                    device && !canResolve
+                      ? `<div class="ticket-hint">まだ${device.name}が正常に通信できていません。🔍調査で原因を確認しましょう。</div>`
+                      : ""
+                  }
+                </div>`
+          }
+        </div>
+      </div>`;
+    }
+
+    const onlineCount = runCommunicationTest(this.state).filter((r) => r.success).length;
+    const open = openTicketCount(this.state);
+    const rows = this.state.tickets
+      .slice()
+      .reverse()
+      .map((t) => {
+        const employee = employeeById(t.employeeId);
+        return `<button class="ticket-row ticket-row--${t.status === "解決" ? "done" : "open"}" data-helpdesk-open="${t.id}">
+          <div class="ticket-row-top">
+            <span class="ticket-priority ticket-priority--${t.priority}">${t.priority}</span>
+            <span class="ticket-status">${t.status}</span>
+          </div>
+          <div class="ticket-row-subject">${t.subject}</div>
+          <div class="ticket-row-employee">${employee ? `${employee.name}さん（${employee.department}）` : ""}</div>
+        </button>`;
+      })
+      .join("");
+    return `<div class="overlay" data-overlay="helpdesk">
+      <div class="sheet">
+        <div class="sheet-header"><h2>🎫 ヘルプデスク</h2><button class="close-btn" data-close="helpdesk">✕</button></div>
+        <div class="helpdesk-stats">
+          <div><span>社員数</span><span>${EMPLOYEES.length}人</span></div>
+          <div><span>稼働PC/サーバー</span><span>${onlineCount}台</span></div>
+          <div><span>未処理チケット</span><span>${open}件</span></div>
+        </div>
+        ${rows || `<div class="helpdesk-empty">現在チケットはありません。</div>`}
+      </div>
+    </div>`;
+  }
+
   private renderBook(): string {
     if (!this.ui.showBook) return "";
     let inner: string;
@@ -1282,6 +1397,9 @@ export class App {
             <div class="mission-desc">${mission.description}</div>
           </button>
           <button class="book-btn" data-book="1" title="説明ブック">📖</button>
+          <button class="helpdesk-btn" data-helpdesk="1" title="ヘルプデスク">
+            🎫${openTicketCount(s) > 0 ? `<span class="badge">${openTicketCount(s)}</span>` : ""}
+          </button>
           <button class="reset-btn" data-reset="1" title="ゲームリセット">⟲</button>
         </header>
 
@@ -1317,6 +1435,7 @@ export class App {
         ${this.renderDiagnosis()}
         ${this.renderInspection()}
         ${this.renderJobLetter()}
+        ${this.renderHelpdesk()}
         ${this.renderBook()}
         ${this.renderTest()}
         ${this.renderClear()}
@@ -1350,6 +1469,7 @@ export class App {
       this.ui.showBook = true;
       this.render();
     });
+    this.root.querySelector('[data-helpdesk="1"]')?.addEventListener("click", () => this.handleOpenHelpdesk());
 
     this.root.querySelectorAll<HTMLElement>("[data-mode]").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -1364,6 +1484,7 @@ export class App {
       if (which === "diagnosis") this.ui.showDiagnosis = false;
       if (which === "inspection") this.ui.showInspection = false;
       if (which === "jobletter") this.ui.showJobLetter = false;
+      if (which === "helpdesk") this.ui.showHelpdesk = false;
       if (which === "book") this.ui.showBook = false;
       if (which === "test") this.ui.showTest = false;
       if (which === "clear") this.ui.showClear = false;
@@ -1426,6 +1547,20 @@ export class App {
       this.ui.showCompareSelect = false;
       this.ui.showInfo = true;
       this.render();
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-helpdesk-open]").forEach((btn) => {
+      btn.addEventListener("click", () => this.handleOpenTicket(btn.dataset.helpdeskOpen!));
+    });
+    this.root.querySelector<HTMLElement>("[data-helpdesk-back]")?.addEventListener("click", () => {
+      this.ui.helpdeskTicketId = null;
+      this.render();
+    });
+    this.root.querySelector<HTMLElement>("[data-ticket-goto-device]")?.addEventListener("click", (e) => {
+      this.handleTicketGotoDevice((e.currentTarget as HTMLElement).dataset.ticketGotoDevice!);
+    });
+    this.root.querySelector<HTMLElement>("[data-ticket-resolve]")?.addEventListener("click", (e) => {
+      this.handleResolveTicket((e.currentTarget as HTMLElement).dataset.ticketResolve!);
     });
 
     this.root.querySelector('[data-claim="1"]')?.addEventListener("click", () => this.handleClaimReward());

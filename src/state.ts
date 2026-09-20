@@ -21,6 +21,8 @@ export function createInitialState(): GameState {
     connections: [],
     rooms: DEFAULT_ROOMS,
     vlans: [{ id: DEFAULT_VLAN_ID, name: "default" }],
+    tickets: [],
+    nextTicketSeq: 1,
     missionIndex: 0,
     missionCleared: {},
     mode: "idle",
