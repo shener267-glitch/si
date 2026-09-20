@@ -657,8 +657,9 @@ export class App {
     return this.state.rooms
       .map(
         (r) =>
-          `<div class="room" style="left:${r.x}px;top:${r.y}px;width:${r.width}px;height:${r.height}px">
-            <span class="room-label">${r.name}</span>
+          `<div class="room room--wall-${r.wallMaterial} room--floor-${r.floorFinish}"
+            style="left:${r.x}px;top:${r.y}px;width:${r.width}px;height:${r.height}px">
+            <span class="room-label">${r.name}<span class="room-building">${r.building}</span></span>
           </div>`
       )
       .join("");

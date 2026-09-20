@@ -352,10 +352,66 @@ body {
 
 .room {
   position: absolute;
-  border: 1px dashed rgba(143, 164, 179, 0.4);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  border-style: solid;
   pointer-events: none;
+}
+
+/* Wall thickness/tone by material (design doc v7.1 §6) - thicker/darker borders read
+ * as heavier walls, giving concrete and glass a visibly different presence. */
+.room--wall-gypsum {
+  border-width: 2px;
+  border-color: rgba(143, 164, 179, 0.4);
+}
+
+.room--wall-wood {
+  border-width: 3px;
+  border-color: rgba(191, 143, 92, 0.5);
+}
+
+.room--wall-glass {
+  border-width: 2px;
+  border-style: dashed;
+  border-color: rgba(120, 200, 255, 0.55);
+}
+
+.room--wall-concrete {
+  border-width: 5px;
+  border-color: rgba(160, 160, 168, 0.55);
+}
+
+.room--wall-thick_concrete {
+  border-width: 8px;
+  border-color: rgba(120, 120, 128, 0.65);
+}
+
+/* Floor texture by finish (design doc v7.1 §7) - subtle patterns, not solid fills, so
+ * the map stays readable. */
+.room--floor-carpet {
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.025) 0 6px, rgba(255, 255, 255, 0.05) 6px 12px);
+}
+
+.room--floor-tile {
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 28px),
+    rgba(255, 255, 255, 0.015);
+}
+
+.room--floor-oa_floor {
+  background:
+    repeating-linear-gradient(0deg, rgba(120, 200, 255, 0.06) 0 1px, transparent 1px 20px),
+    repeating-linear-gradient(90deg, rgba(120, 200, 255, 0.06) 0 1px, transparent 1px 20px),
+    rgba(120, 200, 255, 0.025);
+}
+
+.room--floor-waterproof {
+  background: rgba(120, 180, 220, 0.045);
+}
+
+.room--floor-plain {
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .room-label {
@@ -365,6 +421,13 @@ body {
   font-size: 11px;
   color: var(--text-dim);
   letter-spacing: 0.05em;
+}
+
+.room-building {
+  display: block;
+  font-size: 9px;
+  opacity: 0.6;
+  margin-top: 1px;
 }
 
 .device {
