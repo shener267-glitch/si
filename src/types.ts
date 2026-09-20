@@ -38,11 +38,19 @@ export interface DeviceCatalogItem {
   category: DeviceCategory;
   label: string;
   price: number;
-  icon: string;
   description: string;
   ports: Array<Pick<Port, "type" | "capacity">>;
-  /** Display-only spec sheet for the shop's device-comparison table (design doc §15). */
-  specs?: Record<string, string>;
+  /** The device model's own fixed specs, shown identically in the shop's and a placed
+   * device's info panel (design doc v5-fix §12/§13) - never changes after purchase. */
+  specifications: Record<string, string>;
+}
+
+/** One row of a device's "現在の状態" section - computed from live game state, as
+ * opposed to `specifications` which describes the model itself (design doc v5-fix §11). */
+export interface CurrentStateRow {
+  label: string;
+  value: string;
+  ok?: boolean;
 }
 
 /** Router-side LAN configuration (also carries WAN uplink / NAT toggle). */

@@ -1,54 +1,53 @@
+import { deviceIconMarkup } from "./icons";
 import { isComputerType } from "./types";
 import type { ClientConfig, Device, DeviceCatalogItem, DeviceType, RouterConfig } from "./types";
 
 // Shop catalog. Ports are templates (capacity/type only); real Port objects
-// with unique ids get stamped out per-device in createDevice().
+// with unique ids get stamped out per-device in createDevice(). `specifications` is the
+// single source of truth rendered by both the shop's and a placed device's info panel
+// (design doc v5-fix §12).
 export const DEVICE_CATALOG: DeviceCatalogItem[] = [
   {
     type: "desktop_pc",
     category: "computer",
     label: "デスクトップPC",
     price: 100_000,
-    icon: "🖥️",
     description: "社員が使う据え置き型の端末。有線LANのみで接続する。",
     ports: [{ type: "ETHERNET" }],
-    specs: { CPU: "標準", メモリ: "8GB", 接続: "有線LANのみ", 用途: "一般事務" },
+    specifications: { CPU: "標準", メモリ: "8GB", ストレージ: "256GB SSD", ネットワーク: "有線LANのみ（Wi-Fiなし）", 消費電力: "約180W", バッテリー: "なし", 用途: "一般事務" },
   },
   {
     type: "notebook_pc",
     category: "computer",
     label: "ノートPC",
     price: 120_000,
-    icon: "💻",
     description: "持ち運べる端末。バッテリーを内蔵し、Wi-Fiのみで接続する。",
     ports: [{ type: "WIFI" }],
-    specs: { CPU: "標準", メモリ: "8GB", 接続: "Wi-Fiのみ", 用途: "外出先・会議室" },
+    specifications: { CPU: "標準", メモリ: "8GB", ストレージ: "256GB SSD", ネットワーク: "Wi-Fiのみ（有線LANなし）", 消費電力: "約65W", バッテリー: "あり", 用途: "外出先・会議室" },
   },
   {
     type: "workstation",
     category: "computer",
     label: "ワークステーション",
     price: 350_000,
-    icon: "🖲️",
     description: "CADや設計など重い処理向けの高性能端末。有線LANのみで接続する。",
     ports: [{ type: "ETHERNET" }],
-    specs: { CPU: "高性能", メモリ: "32GB", 接続: "有線LANのみ", 用途: "CAD・設計・重い処理" },
+    specifications: { CPU: "高性能", メモリ: "32GB", ストレージ: "1TB SSD", ネットワーク: "有線LANのみ（Wi-Fiなし）", 消費電力: "約250W", バッテリー: "なし", 用途: "CAD・設計・重い処理" },
   },
   {
     type: "server",
     category: "server",
     label: "サーバー",
     price: 200_000,
-    icon: "🗄️",
     description: "社内サービスを提供する。固定IPを設定することが多い。",
     ports: [{ type: "ETHERNET" }],
+    specifications: { CPU: "標準", メモリ: "16GB", ストレージ: "1TB HDD", ネットワーク: "有線LANのみ", 用途: "ファイル共有・社内サービス提供", 稼働: "24時間常時稼働を想定" },
   },
   {
     type: "router",
     category: "network",
     label: "ルーター",
     price: 80_000,
-    icon: "🌐",
     description: "WANとLANをつなぎ、DHCP・NATを行う。",
     ports: [
       { type: "WAN" },
@@ -57,69 +56,70 @@ export const DEVICE_CATALOG: DeviceCatalogItem[] = [
       { type: "LAN" },
       { type: "LAN" },
     ],
+    specifications: { WANポート: "1", LANポート: "4", DHCP: "対応", NAT: "対応", 推奨接続台数: "〜20台" },
   },
   {
     type: "switch4",
     category: "network",
     label: "スイッチ（4ポート）",
     price: 50_000,
-    icon: "🔀",
     description: "4台までの機器をまとめて接続できる。",
     ports: [{ type: "ETHERNET" }, { type: "ETHERNET" }, { type: "ETHERNET" }, { type: "ETHERNET" }],
+    specifications: { ポート数: "4", 速度: "1000Mbps", PoE給電: "非対応" },
   },
   {
     type: "switch8",
     category: "network",
     label: "スイッチ（8ポート）",
     price: 80_000,
-    icon: "🔀",
     description: "8台までの機器をまとめて接続できる。",
     ports: Array.from({ length: 8 }, () => ({ type: "ETHERNET" as const })),
+    specifications: { ポート数: "8", 速度: "1000Mbps", PoE給電: "非対応" },
   },
   {
     type: "onu",
     category: "network",
     label: "ONU（回線終端装置）",
     price: 40_000,
-    icon: "📶",
     description: "ISPの回線を終端し、ルーターのWANへつなぐ。",
     ports: [{ type: "ETHERNET" }, { type: "ETHERNET" }],
+    specifications: { 対応回線: "光回線", ポート数: "2", 用途: "ISP回線の終端" },
   },
   {
     type: "wifi",
     category: "network",
     label: "Wi-Fiアクセスポイント",
     price: 30_000,
-    icon: "📡",
     description: "有線LANを無線化する。複数台が同時接続できる。",
     ports: [{ type: "ETHERNET" }, { type: "WIFI", capacity: null }],
+    specifications: { 規格: "Wi-Fi 5（11ac）", 同時接続台数: "〜30台", 有線ポート: "1" },
   },
   {
     type: "lan_jack",
     category: "wiring",
     label: "LANコンセント",
     price: 5_000,
-    icon: "🔌",
     description: "壁に設置する情報コンセント。片側にPCなど、反対側にパッチパネルをつなぐ。",
     ports: [{ type: "ETHERNET" }, { type: "ETHERNET" }],
+    specifications: { ポート数: "2", 用途: "壁面の情報コンセント" },
   },
   {
     type: "patch_panel",
     category: "wiring",
     label: "パッチパネル",
     price: 40_000,
-    icon: "🗄️",
     description: "通信室でLANコンセントの配線をまとめ、スイッチへ引き渡す。",
     ports: Array.from({ length: 8 }, () => ({ type: "ETHERNET" as const })),
+    specifications: { ポート数: "8", 用途: "配線の集約" },
   },
   {
     type: "rack",
     category: "wiring",
     label: "通信ラック",
     price: 60_000,
-    icon: "🗃️",
     description: "通信室に設置し、ONU・ルーター・スイッチ・パッチパネルをまとめて収める什器。ケーブルはつなげない。",
     ports: [],
+    specifications: { 収容ユニット: "12U", 備考: "ケーブル接続不可（装飾什器）" },
   },
 ];
 
@@ -131,8 +131,6 @@ export const CATEGORY_LABELS: Record<DeviceCatalogItem["category"], string> = {
 };
 
 export const CATEGORY_ORDER: DeviceCatalogItem["category"][] = ["computer", "server", "network", "wiring"];
-
-export const INTERNET_ICON = "☁️";
 
 export function catalogItem(type: DeviceType): DeviceCatalogItem {
   const item = DEVICE_CATALOG.find((d) => d.type === type);
@@ -173,8 +171,7 @@ export function shortLabel(type: DeviceType): string {
 const POWERED_TYPES: DeviceType[] = ["router", "switch4", "switch8", "onu", "wifi"];
 
 export function iconFor(type: DeviceType): string {
-  if (type === "internet") return INTERNET_ICON;
-  return catalogItem(type).icon;
+  return deviceIconMarkup(type);
 }
 
 function defaultRouterConfig(): RouterConfig {

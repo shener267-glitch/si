@@ -1,6 +1,6 @@
 import { BOOK_CATEGORIES, findBookPage } from "./book";
 import { cableLengthMeters, isCableTooLong } from "./cables";
-import { CATEGORY_LABELS, CATEGORY_ORDER, DEVICE_CATALOG, iconFor, shortLabel } from "./devices";
+import { CATEGORY_LABELS, CATEGORY_ORDER, catalogItem, DEVICE_CATALOG, iconFor, shortLabel } from "./devices";
 import { diagnoseDevice, ping, runCommunicationTest } from "./diagnostics";
 import { currentMission, MISSIONS } from "./missions";
 import { isValidIp, resolveAllConfigs } from "./netutils";
@@ -8,6 +8,7 @@ import {
   OFFICE_SIZE,
   buyDevice,
   connectDevices,
+  connectionsOf,
   deviceById,
   disconnectCable,
   moveDevice,
@@ -24,6 +25,7 @@ import {
 import { isComputerType } from "./types";
 import type {
   ClientConfig,
+  CurrentStateRow,
   Device,
   DeviceDiagnosis,
   DeviceType,
@@ -32,6 +34,10 @@ import type {
   PingResult,
   RouterConfig,
 } from "./types";
+
+/** What the info panel is currently showing - a not-yet-owned catalog model, or a
+ * specific device instance (unplaced or placed) whose specs + live state we show. */
+type InfoTarget = { kind: "catalog"; type: DeviceType } | { kind: "device"; deviceId: string };
 
 interface UiState {
   showShop: boolean;
@@ -42,6 +48,9 @@ interface UiState {
   showInspection: boolean;
   showBook: boolean;
   showJobLetter: boolean;
+  showInfo: boolean;
+  infoTarget: InfoTarget | null;
+  showCompareSelect: boolean;
   showCompare: boolean;
   compareSelection: DeviceType[];
   settingsDeviceId: string | null;
@@ -65,6 +74,9 @@ function initialUi(): UiState {
     showInspection: false,
     showBook: false,
     showJobLetter: false,
+    showInfo: false,
+    infoTarget: null,
+    showCompareSelect: false,
     showCompare: false,
     compareSelection: [],
     settingsDeviceId: null,
@@ -136,7 +148,36 @@ export class App {
     this.render();
   }
 
-  private handleToggleCompare(type: DeviceType) {
+  private infoTargetType(): DeviceType | null {
+    const target = this.ui.infoTarget;
+    if (!target) return null;
+    if (target.kind === "catalog") return target.type;
+    return deviceById(this.state, target.deviceId)?.type ?? null;
+  }
+
+  private openInfoForCatalog(type: DeviceType) {
+    this.ui.infoTarget = { kind: "catalog", type };
+    this.ui.showInfo = true;
+    this.render();
+  }
+
+  private openInfoForDevice(deviceId: string) {
+    this.ui.infoTarget = { kind: "device", deviceId };
+    this.ui.showInfo = true;
+    this.render();
+  }
+
+  private handleOpenCompareSelect() {
+    // Comparison is model-level (catalog specs), so it starts from whichever model
+    // the info panel is currently showing - a placed device compares its own model.
+    const type = this.infoTargetType();
+    this.ui.compareSelection = type ? [type] : [];
+    this.ui.showInfo = false;
+    this.ui.showCompareSelect = true;
+    this.render();
+  }
+
+  private handleToggleCompareSelect(type: DeviceType) {
     const sel = this.ui.compareSelection;
     const idx = sel.indexOf(type);
     if (idx >= 0) sel.splice(idx, 1);
@@ -145,6 +186,8 @@ export class App {
   }
 
   private handleOpenCompare() {
+    if (this.ui.compareSelection.length < 2) return;
+    this.ui.showCompareSelect = false;
     this.ui.showCompare = true;
     this.render();
   }
@@ -193,12 +236,61 @@ export class App {
     }
   }
 
+  private handleInfoGotoSettings(deviceId: string) {
+    const device = deviceById(this.state, deviceId);
+    if (!device) return;
+    this.ui.showInfo = false;
+    this.state.mode = "settings";
+    this.ui.settingsDeviceId = device.id;
+    this.ui.showSettings = true;
+    this.render();
+  }
+
   private roomFor(device: Device): string | null {
     if (device.x === null || device.y === null) return null;
     const room = this.state.rooms.find(
       (r) => device.x! >= r.x && device.x! <= r.x + r.width && device.y! >= r.y && device.y! <= r.y + r.height
     );
     return room?.name ?? null;
+  }
+
+  // "現在の状態" (design doc v5-fix §11) - live game state, kept separate from the
+  // model's fixed `specifications`. Reuses the same diagnostics/netutils the rest of
+  // the game already uses, rather than recomputing anything new for this panel.
+  private currentStateRows(device: Device): CurrentStateRow[] {
+    const rows: CurrentStateRow[] = [];
+    if (device.x === null) {
+      rows.push({ label: "設置状況", value: "未設置" });
+      return rows;
+    }
+    if (device.power !== undefined) {
+      rows.push({ label: "電源", value: device.power === "on" ? "ON" : "OFF", ok: device.power === "on" });
+    }
+    const conns = connectionsOf(this.state, device.id);
+    const summary = portSummary(this.state, device);
+    rows.push({
+      label: "配線",
+      value: summary ? `接続中 ${summary}` : conns.length > 0 ? `${conns.length}本接続中` : "未配線",
+      ok: conns.length > 0,
+    });
+    if (isComputerType(device.type) || device.type === "server") {
+      const diag = diagnoseDevice(this.state, device.id);
+      const resolved = resolveAllConfigs(this.state).get(device.id);
+      rows.push({ label: "IPアドレス", value: resolved?.ip ?? "未取得", ok: !!resolved?.ip });
+      const firstFail = diag.steps.find((s) => s.status === "fail");
+      rows.push({
+        label: "通信状態",
+        value: diag.success ? "正常（インターネット到達）" : `異常：${firstFail?.label ?? "不明"}`,
+        ok: diag.success,
+      });
+    } else if (device.type === "router") {
+      const cfg = device.networkConfig as RouterConfig;
+      rows.push({ label: "LAN IPアドレス", value: cfg.lanIp });
+      rows.push({ label: "NAT", value: cfg.natEnabled ? "有効" : "無効", ok: cfg.natEnabled });
+    }
+    const room = this.roomFor(device);
+    if (room) rows.push({ label: "設置場所", value: room });
+    return rows;
   }
 
   private handleCableTap(connId: string) {
@@ -272,6 +364,15 @@ export class App {
       this.setToast(result.ok ? "接続しました。" : result.reason ?? "接続できません。");
       this.state.connectFromId = null;
       this.render();
+      return;
+    }
+
+    // Default (idle) mode: tapping any placed device shows its info panel, so a
+    // device's specs/state are reachable from wherever it is without a dedicated
+    // "info mode" (design doc v5-fix §14).
+    if (this.state.mode === "idle" && deviceEl) {
+      const id = deviceEl.dataset.deviceId!;
+      if (deviceById(this.state, id)?.type !== "internet") this.openInfoForDevice(id);
       return;
     }
 
@@ -408,7 +509,7 @@ export class App {
       case "diagnosing":
         return "調べたい機器をタップしてください（PC/サーバーは通信診断、それ以外は現場調査）。";
       default:
-        return "🛒購入・🖐移動・🔌配線・⚙設定・🔍調査・▶テストで操作しよう。分からないことは📖で調べられます。";
+        return "機器をタップすると情報を確認できます。🛒購入・🖐移動・🔌配線・⚙設定・🔍調査・▶テストで操作しよう。分からないことは📖で調べられます。";
     }
   }
 
@@ -420,6 +521,7 @@ export class App {
         return `<div class="device device--${d.type} ${selected ? "device--selected" : ""}"
           data-device-id="${d.id}"
           style="left:${d.x}px;top:${d.y}px">
+          ${d.type !== "internet" ? `<button class="device-info-btn" data-info-device="${d.id}" title="情報">i</button>` : ""}
           <div class="device-icon">${iconFor(d.type)}</div>
           <div class="device-label">${d.name}${summary ? ` <span class="device-ports">${summary}</span>` : ""}</div>
         </div>`;
@@ -463,11 +565,14 @@ export class App {
       <div class="inventory-list">
         ${items
           .map(
-            (d) => `<button class="chip ${
-              d.id === this.state.selectedDeviceId ? "chip--selected" : ""
-            }" data-unplaced-id="${d.id}">
-              <span class="chip-icon">${iconFor(d.type)}</span>${d.name}
-            </button>`
+            (d) => `<div class="chip-wrap">
+              <button class="chip ${
+                d.id === this.state.selectedDeviceId ? "chip--selected" : ""
+              }" data-unplaced-id="${d.id}">
+                <span class="chip-icon">${iconFor(d.type)}</span>${d.name}
+              </button>
+              <button class="chip-info-btn" data-info-device="${d.id}" title="情報">情報</button>
+            </div>`
           )
           .join("")}
       </div>
@@ -476,7 +581,6 @@ export class App {
 
   private renderShop(): string {
     if (!this.ui.showShop) return "";
-    const sel = this.ui.compareSelection;
     return `<div class="overlay" data-overlay="shop">
       <div class="sheet">
         <div class="sheet-header">
@@ -492,32 +596,113 @@ export class App {
               ${items
                 .map(
                   (item) => `<div class="shop-item">
-                    <label class="field field--checkbox shop-item-compare">
-                      <input type="checkbox" data-compare-toggle="${item.type}" ${
-                        sel.includes(item.type) ? "checked" : ""
-                      } />
-                      <span>比較</span>
-                    </label>
-                    <div class="shop-item-icon">${item.icon}</div>
+                    <div class="shop-item-icon">${iconFor(item.type)}</div>
                     <div class="shop-item-info">
                       <div class="shop-item-name">${item.label}</div>
                       <div class="shop-item-desc">${item.description}</div>
                       <div class="shop-item-price">${money(item.price)}</div>
                     </div>
-                    <button class="buy-btn" data-buy="${item.type}" ${
-                      this.state.money < item.price ? "disabled" : ""
-                    }>購入</button>
+                    <div class="shop-item-actions">
+                      <button class="buy-btn" data-buy="${item.type}" ${
+                        this.state.money < item.price ? "disabled" : ""
+                      }>購入</button>
+                      <button class="info-btn" data-info-catalog="${item.type}">情報</button>
+                    </div>
                   </div>`
                 )
                 .join("")}
             </div>
           </div>`;
         }).join("")}
-        ${
-          sel.length >= 2
-            ? `<button class="compare-fab" data-open-compare="1">📊 選択した${sel.length}件を比較する</button>`
-            : ""
-        }
+      </div>
+    </div>`;
+  }
+
+  private specTable(item: (typeof DEVICE_CATALOG)[number]): string {
+    const rows: Array<[string, string]> = [
+      ["価格", money(item.price)],
+      ["ポート", item.ports.map((p) => p.type).join(" / ") || "なし"],
+      ...Object.entries(item.specifications),
+    ];
+    return `<table class="spec-table">
+      ${rows.map(([label, value]) => `<tr><th>${label}</th><td>${value}</td></tr>`).join("")}
+    </table>`;
+  }
+
+  private renderInfo(): string {
+    if (!this.ui.showInfo || !this.ui.infoTarget) return "";
+    const target = this.ui.infoTarget;
+    const type = target.kind === "catalog" ? target.type : deviceById(this.state, target.deviceId)?.type;
+    if (!type) return "";
+    const item = catalogItem(type);
+    const device = target.kind === "device" ? deviceById(this.state, target.deviceId) : undefined;
+
+    const stateSection =
+      device
+        ? `<div class="info-section-label">現在の状態</div>
+           <table class="spec-table">
+             ${this.currentStateRows(device)
+               .map(
+                 (r) =>
+                   `<tr><th>${r.label}</th><td class="${r.ok === false ? "spec-value--bad" : r.ok === true ? "spec-value--ok" : ""}">${r.value}</td></tr>`
+               )
+               .join("")}
+           </table>`
+        : "";
+
+    const actions = device
+      ? `<div class="info-actions">
+          ${
+            App.SETTINGS_TYPES.includes(device.type)
+              ? `<button class="save-btn" data-info-goto-settings="${device.id}">⚙ 設定を開く</button>`
+              : ""
+          }
+        </div>`
+      : `<button class="save-btn" data-buy="${item.type}" ${this.state.money < item.price ? "disabled" : ""}>購入する</button>`;
+
+    return `<div class="overlay" data-overlay="info">
+      <div class="sheet">
+        <div class="sheet-header">
+          <h2>${iconFor(item.type)} ${device ? device.name : item.label}</h2>
+          <button class="close-btn" data-close="info">✕</button>
+        </div>
+        ${device ? `<div class="info-model-label">${item.label}</div>` : ""}
+        <div class="info-section-label">機器仕様</div>
+        ${this.specTable(item)}
+        ${stateSection}
+        ${actions}
+        <button class="compare-link-btn" data-open-compare-select="1">📊 他の機器と比較</button>
+      </div>
+    </div>`;
+  }
+
+  private renderCompareSelect(): string {
+    if (!this.ui.showCompareSelect) return "";
+    const sel = this.ui.compareSelection;
+    return `<div class="overlay" data-overlay="compareSelect">
+      <div class="sheet">
+        <button class="book-back" data-back-to-info="1">← 情報に戻る</button>
+        <div class="sheet-header">
+          <h2>📊 比較する機器を選択</h2>
+          <button class="close-btn" data-close="compareSelect">✕</button>
+        </div>
+        <div class="shop-list">
+          ${DEVICE_CATALOG.map(
+            (item) => `<label class="field field--checkbox compare-select-item">
+              <input type="checkbox" data-compare-select-toggle="${item.type}" ${
+                sel.includes(item.type) ? "checked" : ""
+              } />
+              <div class="shop-item-icon">${iconFor(item.type)}</div>
+              <div class="shop-item-info">
+                <div class="shop-item-name">${item.label}</div>
+                <div class="shop-item-price">${money(item.price)}</div>
+              </div>
+            </label>`
+          ).join("")}
+        </div>
+        <button class="compare-fab" data-open-compare="1" ${sel.length < 2 ? "disabled" : ""}>
+          ${sel.length >= 2 ? `選択した${sel.length}件を比較する` : "2件以上選択してください"}
+        </button>
       </div>
     </div>`;
   }
@@ -528,28 +713,30 @@ export class App {
       .map((t) => DEVICE_CATALOG.find((i) => i.type === t))
       .filter((i): i is (typeof DEVICE_CATALOG)[number] => !!i);
     if (items.length === 0) return "";
-    const specKeys = Array.from(new Set(items.flatMap((i) => Object.keys(i.specs ?? {}))));
+    const specKeys = Array.from(new Set(items.flatMap((i) => Object.keys(i.specifications))));
     const rows: Array<{ label: string; values: string[] }> = [
       { label: "価格", values: items.map((i) => money(i.price)) },
       { label: "ポート", values: items.map((i) => i.ports.map((p) => p.type).join(" / ") || "なし") },
-      ...specKeys.map((key) => ({ label: key, values: items.map((i) => i.specs?.[key] ?? "-") })),
+      ...specKeys.map((key) => ({ label: key, values: items.map((i) => i.specifications[key] ?? "-") })),
     ];
     return `<div class="overlay" data-overlay="compare">
       <div class="sheet">
         <div class="sheet-header"><h2>📊 機器の比較</h2><button class="close-btn" data-close="compare">✕</button></div>
-        <table class="compare-table">
-          <thead>
-            <tr><th></th>${items.map((i) => `<th>${i.icon} ${i.label}</th>`).join("")}</tr>
-          </thead>
-          <tbody>
-            ${rows
-              .map(
-                (row) =>
-                  `<tr><th>${row.label}</th>${row.values.map((v) => `<td>${v}</td>`).join("")}</tr>`
-              )
-              .join("")}
-          </tbody>
-        </table>
+        <div class="compare-table-wrap">
+          <table class="compare-table">
+            <thead>
+              <tr><th></th>${items.map((i) => `<th>${iconFor(i.type)} ${i.label}</th>`).join("")}</tr>
+            </thead>
+            <tbody>
+              ${rows
+                .map(
+                  (row) =>
+                    `<tr><th>${row.label}</th>${row.values.map((v) => `<td>${v}</td>`).join("")}</tr>`
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>`;
   }
@@ -981,6 +1168,8 @@ export class App {
 
         ${this.ui.toast ? `<div class="toast">${this.ui.toast}</div>` : ""}
         ${this.renderShop()}
+        ${this.renderInfo()}
+        ${this.renderCompareSelect()}
         ${this.renderCompare()}
         ${this.renderSettings()}
         ${this.renderDiagnosis()}
@@ -1036,6 +1225,8 @@ export class App {
       if (which === "book") this.ui.showBook = false;
       if (which === "test") this.ui.showTest = false;
       if (which === "clear") this.ui.showClear = false;
+      if (which === "info") this.ui.showInfo = false;
+      if (which === "compareSelect") this.ui.showCompareSelect = false;
       if (which === "compare") this.ui.showCompare = false;
     };
 
@@ -1063,14 +1254,37 @@ export class App {
       btn.addEventListener("click", () => this.handleSelectUnplaced(btn.dataset.unplacedId!));
     });
 
-    this.root.querySelectorAll<HTMLInputElement>("[data-compare-toggle]").forEach((checkbox) => {
+    this.root.querySelectorAll<HTMLElement>("[data-info-catalog]").forEach((btn) => {
+      btn.addEventListener("click", () => this.openInfoForCatalog(btn.dataset.infoCatalog as DeviceType));
+    });
+    this.root.querySelectorAll<HTMLElement>("[data-info-device]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        // These buttons can sit inside a placed device's tile (which itself is a
+        // click target for placing/moving/connecting via the delegated #office
+        // listener) - stop the click from also being interpreted as a mode action.
+        e.stopPropagation();
+        this.openInfoForDevice(btn.dataset.infoDevice!);
+      });
+    });
+    this.root.querySelector<HTMLElement>("[data-open-compare-select]")?.addEventListener("click", () =>
+      this.handleOpenCompareSelect()
+    );
+    this.root.querySelectorAll<HTMLInputElement>("[data-compare-select-toggle]").forEach((checkbox) => {
       checkbox.addEventListener("change", () =>
-        this.handleToggleCompare(checkbox.dataset.compareToggle as DeviceType)
+        this.handleToggleCompareSelect(checkbox.dataset.compareSelectToggle as DeviceType)
       );
     });
     this.root.querySelector<HTMLElement>("[data-open-compare]")?.addEventListener("click", () =>
       this.handleOpenCompare()
     );
+    this.root.querySelector<HTMLElement>("[data-info-goto-settings]")?.addEventListener("click", (e) => {
+      this.handleInfoGotoSettings((e.currentTarget as HTMLElement).dataset.infoGotoSettings!);
+    });
+    this.root.querySelector<HTMLElement>("[data-back-to-info]")?.addEventListener("click", () => {
+      this.ui.showCompareSelect = false;
+      this.ui.showInfo = true;
+      this.render();
+    });
 
     this.root.querySelector('[data-claim="1"]')?.addEventListener("click", () => this.handleClaimReward());
     this.root.querySelector('[data-next-mission="1"]')?.addEventListener("click", () => this.handleNextMission());
