@@ -1,7 +1,7 @@
 import { catalogItem, createDevice, shortLabel } from "./devices";
 import { DEFAULT_ROOMS } from "./rooms";
 import { validatePhysicalConnection } from "./rules";
-import { isComputerType } from "./types";
+import { DEFAULT_VLAN_ID, isComputerType } from "./types";
 import type { ClientConfig, Connection, Device, DeviceType, GameState, RouterConfig } from "./types";
 
 const OFFICE_WIDTH = 640;
@@ -20,6 +20,7 @@ export function createInitialState(): GameState {
     devices: [internet],
     connections: [],
     rooms: DEFAULT_ROOMS,
+    vlans: [{ id: DEFAULT_VLAN_ID, name: "default" }],
     missionIndex: 0,
     missionCleared: {},
     mode: "idle",
@@ -182,6 +183,37 @@ export function updateRouterConfig(
   if (!device || device.type !== "router") return;
   const current = device.networkConfig as RouterConfig;
   device.networkConfig = { ...current, ...patch };
+}
+
+/** Registers a VLAN (or renames it if the id already exists) - design doc v6 §4. */
+export function upsertVlan(state: GameState, id: number, name: string): void {
+  const existing = state.vlans.find((v) => v.id === id);
+  if (existing) {
+    existing.name = name;
+  } else {
+    state.vlans.push({ id, name });
+  }
+}
+
+export function vlanLabel(state: GameState, id: number): string {
+  const vlan = state.vlans.find((v) => v.id === id);
+  return vlan ? `VLAN ${vlan.id}（${vlan.name}）` : `VLAN ${id}`;
+}
+
+export function setPortAccessMode(state: GameState, deviceId: string, portId: string, vlanId: number): void {
+  const port = deviceById(state, deviceId)?.ports.find((p) => p.id === portId);
+  if (!port) return;
+  port.vlanMode = "access";
+  port.accessVlan = vlanId;
+  port.trunkVlans = undefined;
+}
+
+export function setPortTrunkMode(state: GameState, deviceId: string, portId: string, vlanIds: number[]): void {
+  const port = deviceById(state, deviceId)?.ports.find((p) => p.id === portId);
+  if (!port) return;
+  port.vlanMode = "trunk";
+  port.trunkVlans = vlanIds;
+  port.accessVlan = undefined;
 }
 
 export function resetState(): GameState {

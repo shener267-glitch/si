@@ -2,6 +2,7 @@ import { CABLE_MAX_METERS, cableLengthMeters, isCableTooLong } from "./cables";
 import {
   findConnectionBetween,
   findL2Domain,
+  findVlanDomain,
   isValidIp,
   resolveAllConfigs,
   routerReachesInternet,
@@ -25,6 +26,7 @@ const STEP_LABELS: Record<DiagStepKey, string> = {
   power: "電源",
   cable: "ケーブル長",
   port: "ポート状態",
+  vlan: "VLAN",
   ip: "IPアドレス",
   subnet: "サブネット",
   gateway: "デフォルトゲートウェイ",
@@ -51,6 +53,7 @@ const REMAINING_ORDER: DiagStepKey[] = [
   "power",
   "cable",
   "port",
+  "vlan",
   "ip",
   "subnet",
   "gateway",
@@ -158,68 +161,84 @@ export function diagnoseDevice(state: GameState, deviceId: string): DeviceDiagno
   }
   steps.push(ok("port"));
 
-  // 5. IP
+  // 5. VLAN - the physical route above exists, but a switch access/trunk port along
+  // the way may still keep this device's VLAN from ever reaching the router's VLAN
+  // (design doc v6 §3-§6). Checked separately from "physical" so the message is clear:
+  // the cable is fine, the logical network segmentation is what's blocking it.
+  const vlanDomain = findVlanDomain(state, device.id);
+  if (!vlanDomain.router) {
+    steps.push(
+      fail(
+        "vlan",
+        `VLANの設定が原因で${domain.router.name}に到達できません。アクセスポート/トランクポートの設定を確認しましょう。`
+      )
+    );
+    return finish(4);
+  }
+  steps.push(ok("vlan"));
+
+  // 6. IP
   const resolved = resolveAllConfigs(state).get(device.id) ?? {};
   const cfg = device.networkConfig as ClientConfig | undefined;
   if (resolved.duplicateOf) {
     steps.push(fail("ip", `IPアドレスが重複しています（${resolved.duplicateOf}と同じ）。`));
-    return finish(4);
+    return finish(5);
   }
   if (cfg?.dhcpEnabled && resolved.dhcpFailed) {
     steps.push(fail("ip", "IPアドレスを取得できません（DHCPサーバーが見つかりません）。"));
-    return finish(4);
+    return finish(5);
   }
   if (!resolved.ip || !isValidIp(resolved.ip)) {
     steps.push(fail("ip", "IPアドレスが設定されていません。"));
-    return finish(4);
+    return finish(5);
   }
   steps.push(ok("ip", `${resolved.ip}${cfg?.dhcpEnabled ? "（DHCPで自動取得）" : "（手動設定）"}`));
 
-  // 6. Subnet
+  // 7. Subnet
   if (!resolved.subnetMask || !isValidIp(resolved.subnetMask)) {
     steps.push(fail("subnet", "サブネットマスクが設定されていません。"));
-    return finish(5);
+    return finish(6);
   }
   steps.push(ok("subnet", resolved.subnetMask));
 
-  // 7. Gateway
+  // 8. Gateway
   const routerConfig = domain.router.networkConfig as RouterConfig;
   if (!resolved.gateway) {
     steps.push(fail("gateway", "デフォルトゲートウェイが設定されていません。"));
-    return finish(6);
+    return finish(7);
   }
   if (!sameSubnet(resolved.ip, resolved.gateway, resolved.subnetMask)) {
     steps.push(fail("gateway", `ゲートウェイ（${resolved.gateway}）が自分のサブネットと異なります。`));
-    return finish(6);
+    return finish(7);
   }
   if (resolved.gateway !== routerConfig.lanIp) {
     steps.push(fail("gateway", `ゲートウェイ（${resolved.gateway}）に到達できません。`));
-    return finish(6);
+    return finish(7);
   }
   steps.push(ok("gateway", resolved.gateway));
 
-  // 8. Routing (router -> internet, e.g. via ONU)
+  // 9. Routing (router -> internet, e.g. via ONU)
   if (!routerReachesInternet(state, domain.router.id, internetDeviceId())) {
     steps.push(fail("route", "ルーターがインターネット回線（ONU）に接続されていません。"));
-    return finish(7);
+    return finish(8);
   }
   steps.push(ok("route"));
 
-  // 9. NAT
+  // 10. NAT
   if (!routerConfig.natEnabled) {
     steps.push(fail("nat", "ルーターのNAT設定が無効になっています。"));
-    return finish(8);
+    return finish(9);
   }
   steps.push(ok("nat"));
 
-  // 10. DNS
+  // 11. DNS
   if (!resolved.dns || !isValidIp(resolved.dns)) {
     steps.push(fail("dns", "DNSサーバーが設定されていません。"));
-    return finish(9);
+    return finish(10);
   }
   steps.push(ok("dns", resolved.dns));
 
-  // 11. Internet
+  // 12. Internet
   steps.push(ok("internet"));
   return finish(-1);
 }
@@ -238,7 +257,7 @@ export function ping(state: GameState, sourceDeviceId: string, targetIp: string)
   if (!isValidIp(targetIp)) {
     return { target: targetIp, success: false, message: "宛先IPアドレスの形式が正しくありません。" };
   }
-  const domain = findL2Domain(state, sourceDeviceId);
+  const domain = findVlanDomain(state, sourceDeviceId);
   const mask = resolved.subnetMask;
 
   if (mask && sameSubnet(resolved.ip, targetIp, mask)) {

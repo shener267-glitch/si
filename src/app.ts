@@ -1,6 +1,14 @@
 import { BOOK_CATEGORIES, findBookPage } from "./book";
 import { cableLengthMeters, isCableTooLong } from "./cables";
-import { CATEGORY_LABELS, CATEGORY_ORDER, catalogItem, DEVICE_CATALOG, iconFor, shortLabel } from "./devices";
+import {
+  CATEGORY_LABELS,
+  CATEGORY_ORDER,
+  catalogItem,
+  DEVICE_CATALOG,
+  iconFor,
+  isVlanCapable,
+  shortLabel,
+} from "./devices";
 import { diagnoseDevice, ping, runCommunicationTest } from "./diagnostics";
 import { currentMission, MISSIONS } from "./missions";
 import { isValidIp, resolveAllConfigs } from "./netutils";
@@ -16,13 +24,16 @@ import {
   placedDevices,
   portUsageCount,
   resetState,
+  setPortAccessMode,
   setPortStatus,
+  setPortTrunkMode,
   togglePower,
   unplacedDevices,
   updateClientConfig,
   updateRouterConfig,
+  upsertVlan,
 } from "./state";
-import { isComputerType } from "./types";
+import { DEFAULT_VLAN_ID, isComputerType } from "./types";
 import type {
   ClientConfig,
   CurrentStateRow,
@@ -257,6 +268,14 @@ export class App {
   // "現在の状態" (design doc v5-fix §11) - live game state, kept separate from the
   // model's fixed `specifications`. Reuses the same diagnostics/netutils the rest of
   // the game already uses, rather than recomputing anything new for this panel.
+  private portVlanSummary(port: Device["ports"][number]): string {
+    if (port.vlanMode === "trunk") {
+      const list = port.trunkVlans ?? [];
+      return list.length > 0 ? `Trunk(VLAN ${list.join(",")})` : "Trunk（未設定）";
+    }
+    return `Access(VLAN ${port.accessVlan ?? DEFAULT_VLAN_ID})`;
+  }
+
   private currentStateRows(device: Device): CurrentStateRow[] {
     const rows: CurrentStateRow[] = [];
     if (device.x === null) {
@@ -287,6 +306,11 @@ export class App {
       const cfg = device.networkConfig as RouterConfig;
       rows.push({ label: "LAN IPアドレス", value: cfg.lanIp });
       rows.push({ label: "NAT", value: cfg.natEnabled ? "有効" : "無効", ok: cfg.natEnabled });
+    } else if (isVlanCapable(device.type)) {
+      rows.push({
+        label: "VLAN構成",
+        value: device.ports.map((p, i) => `ポート${i + 1}: ${this.portVlanSummary(p)}`).join(" / "),
+      });
     }
     const room = this.roomFor(device);
     if (room) rows.push({ label: "設置場所", value: room });
@@ -477,6 +501,49 @@ export class App {
     });
     this.setToast("設定を保存しました。");
     this.ui.showSettings = false;
+    this.render();
+  }
+
+  private handleAddVlan() {
+    const idInput = this.root.querySelector<HTMLInputElement>("#vlan-add-id");
+    const nameInput = this.root.querySelector<HTMLInputElement>("#vlan-add-name");
+    if (!idInput || !nameInput) return;
+    const id = Number(idInput.value);
+    const name = nameInput.value.trim();
+    if (!Number.isInteger(id) || id <= 0) {
+      this.setToast("VLAN IDは1以上の整数で入力してください。");
+      return;
+    }
+    if (!name) {
+      this.setToast("VLAN名を入力してください。");
+      return;
+    }
+    upsertVlan(this.state, id, name);
+    this.setToast(`VLAN ${id}（${name}）を登録しました。`);
+    this.render();
+  }
+
+  private handlePortVlanModeChange(deviceId: string, portId: string, mode: "access" | "trunk") {
+    if (mode === "access") {
+      setPortAccessMode(this.state, deviceId, portId, DEFAULT_VLAN_ID);
+    } else {
+      setPortTrunkMode(this.state, deviceId, portId, []);
+    }
+    this.render();
+  }
+
+  private handlePortAccessVlanChange(deviceId: string, portId: string, vlanId: number) {
+    setPortAccessMode(this.state, deviceId, portId, vlanId);
+    this.render();
+  }
+
+  private handlePortTrunkVlanToggle(deviceId: string, portId: string, vlanId: number, checked: boolean) {
+    const port = deviceById(this.state, deviceId)?.ports.find((p) => p.id === portId);
+    if (!port) return;
+    const current = new Set(port.trunkVlans ?? []);
+    if (checked) current.add(vlanId);
+    else current.delete(vlanId);
+    setPortTrunkMode(this.state, deviceId, portId, [...current]);
     this.render();
   }
 
@@ -773,12 +840,85 @@ export class App {
     </div>`;
   }
 
+  private renderVlanManager(): string {
+    const rows = this.state.vlans
+      .map((v) => `<div class="vlan-row"><span>VLAN ${v.id}</span><span>${v.name}</span></div>`)
+      .join("");
+    return `<div class="vlan-manager">
+      <div class="port-toggle-label">🏷 VLAN一覧</div>
+      ${rows}
+      <div class="vlan-add-row">
+        <input id="vlan-add-id" type="number" min="1" max="4094" placeholder="ID（例：10）" />
+        <input id="vlan-add-name" type="text" placeholder="名前（例：営業）" />
+        <button type="button" class="save-btn" data-add-vlan="1">追加</button>
+      </div>
+    </div>`;
+  }
+
+  private renderPortVlanConfig(device: Device): string {
+    if (!isVlanCapable(device.type) || device.ports.length === 0) return "";
+    const rows = device.ports
+      .map((port, i) => {
+        const mode = port.vlanMode ?? "access";
+        const modeSelect = `<select data-port-vlan-mode="${device.id}:${port.id}">
+          <option value="access" ${mode === "access" ? "selected" : ""}>Access</option>
+          <option value="trunk" ${mode === "trunk" ? "selected" : ""}>Trunk</option>
+        </select>`;
+        const detail =
+          mode === "access"
+            ? `<select data-port-access-vlan="${device.id}:${port.id}">
+                ${this.state.vlans
+                  .map(
+                    (v) =>
+                      `<option value="${v.id}" ${port.accessVlan === v.id ? "selected" : ""}>${v.name}（VLAN ${v.id}）</option>`
+                  )
+                  .join("")}
+              </select>`
+            : `<div class="trunk-vlan-checks">
+                ${this.state.vlans
+                  .map(
+                    (v) => `<label class="field field--checkbox">
+                      <input type="checkbox" data-port-trunk-vlan="${device.id}:${port.id}:${v.id}" ${
+                        (port.trunkVlans ?? []).includes(v.id) ? "checked" : ""
+                      } />
+                      <span>VLAN ${v.id}（${v.name}）</span>
+                    </label>`
+                  )
+                  .join("")}
+              </div>`;
+        return `<div class="port-vlan-row">
+          <div class="port-vlan-row-label">ポート${i + 1}</div>
+          ${modeSelect}
+          ${detail}
+        </div>`;
+      })
+      .join("");
+    return `<div class="port-vlan-list">
+      <div class="port-toggle-label">🏷 ポートのVLAN設定</div>
+      ${rows}
+    </div>`;
+  }
+
   private renderSettings(): string {
     if (!this.ui.showSettings || !this.ui.settingsDeviceId) return "";
     const device = deviceById(this.state, this.ui.settingsDeviceId);
     if (!device) return "";
 
-    if (device.type === "switch4" || device.type === "switch8" || device.type === "onu" || device.type === "wifi") {
+    if (device.type === "switch4" || device.type === "switch8") {
+      return `<div class="overlay" data-overlay="settings">
+        <div class="sheet">
+          <div class="sheet-header"><h2>⚙ ${device.name} の設定</h2><button class="close-btn" data-close="settings">✕</button></div>
+          <form class="settings-form">
+            ${this.renderPowerToggle(device)}
+            ${this.renderVlanManager()}
+            ${this.renderPortVlanConfig(device)}
+            ${this.renderPortToggles(device)}
+          </form>
+        </div>
+      </div>`;
+    }
+
+    if (device.type === "onu" || device.type === "wifi") {
       return `<div class="overlay" data-overlay="settings">
         <div class="sheet">
           <div class="sheet-header"><h2>⚙ ${device.name} の設定</h2><button class="close-btn" data-close="settings">✕</button></div>
@@ -926,8 +1066,10 @@ export class App {
     if (!device) return "";
     const room = this.roomFor(device);
 
+    const vlanCapable = isVlanCapable(device.type);
     const portRows = device.ports
       .map((port) => {
+        const vlanInfo = vlanCapable ? `<br>VLAN：${this.portVlanSummary(port)}` : "";
         const conn = this.state.connections.find(
           (c) =>
             (c.fromDevice === device.id && c.fromPort === port.id) ||
@@ -936,7 +1078,7 @@ export class App {
         if (!conn) {
           return `<div class="inspect-port">
             <div class="inspect-port-name">${port.type}ポート ${port.status === "down" ? "（無効）" : ""}</div>
-            <div class="inspect-port-detail">空き</div>
+            <div class="inspect-port-detail">空き${vlanInfo}</div>
           </div>`;
         }
         const otherId = conn.fromDevice === device.id ? conn.toDevice : conn.fromDevice;
@@ -952,7 +1094,7 @@ export class App {
         }
         return `<div class="inspect-port">
           <div class="inspect-port-name">${port.type}ポート ${port.status === "down" ? "（無効）" : ""}</div>
-          <div class="inspect-port-detail">接続先：${other ? other.name : "不明"}<br>${cableInfo}</div>
+          <div class="inspect-port-detail">接続先：${other ? other.name : "不明"}<br>${cableInfo}${vlanInfo}</div>
         </div>`;
       })
       .join("");
@@ -1331,6 +1473,27 @@ export class App {
         const [deviceId, portId] = checkbox.dataset.portFaultToggle!.split(":");
         setPortStatus(this.state, deviceId, portId, checkbox.checked ? "up" : "down");
         this.render();
+      });
+    });
+
+    this.root.querySelector<HTMLElement>("[data-add-vlan]")?.addEventListener("click", () => this.handleAddVlan());
+
+    this.root.querySelectorAll<HTMLSelectElement>("[data-port-vlan-mode]").forEach((select) => {
+      select.addEventListener("change", () => {
+        const [deviceId, portId] = select.dataset.portVlanMode!.split(":");
+        this.handlePortVlanModeChange(deviceId, portId, select.value as "access" | "trunk");
+      });
+    });
+    this.root.querySelectorAll<HTMLSelectElement>("[data-port-access-vlan]").forEach((select) => {
+      select.addEventListener("change", () => {
+        const [deviceId, portId] = select.dataset.portAccessVlan!.split(":");
+        this.handlePortAccessVlanChange(deviceId, portId, Number(select.value));
+      });
+    });
+    this.root.querySelectorAll<HTMLInputElement>("[data-port-trunk-vlan]").forEach((checkbox) => {
+      checkbox.addEventListener("change", () => {
+        const [deviceId, portId, vlanId] = checkbox.dataset.portTrunkVlan!.split(":");
+        this.handlePortTrunkVlanToggle(deviceId, portId, Number(vlanId), checkbox.checked);
       });
     });
 

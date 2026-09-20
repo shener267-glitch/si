@@ -1,5 +1,5 @@
 import { diagnoseDevice } from "./diagnostics";
-import { findL2Domain, resolveAllConfigs, shortestPathDevices } from "./netutils";
+import { findL2Domain, findVlanDomain, resolveAllConfigs, shortestPathDevices } from "./netutils";
 import { connectionsOf } from "./state";
 import { isComputerType } from "./types";
 import type { ClientConfig, GameState, Mission } from "./types";
@@ -233,6 +233,36 @@ export const MISSIONS: Mission[] = [
       return online
         ? { ok: true }
         : { ok: false, detail: "通信できているワークステーションがまだありません。" };
+    },
+  },
+  {
+    id: "m10",
+    title: "案件10",
+    description: "新オフィスに営業部と開発部を収容してください。VLANで部署ごとにネットワークを分離する必要があります",
+    reward: 300_000,
+    client: "あおぞら商事株式会社 情報システム部",
+    deadline: "納期：5日後",
+    budgetHint: "予算目安：¥200,000",
+    requirements: [
+      "同じスイッチに営業部・開発部それぞれのPCを接続してください。",
+      "同じ部署内のPC同士は通信できるようにしてください。",
+      "異なる部署のPC同士は通信できないよう、VLANで分離してください。",
+    ],
+    check: (state) => {
+      const pcs = state.devices.filter((d) => isComputerType(d.type) && d.x !== null);
+      const separated = pcs.some((a) => {
+        const domainA = findVlanDomain(state, a.id).memberIds;
+        const reachable = pcs.some((p) => p.id !== a.id && domainA.has(p.id));
+        const isolated = pcs.some((p) => p.id !== a.id && !domainA.has(p.id));
+        return reachable && isolated;
+      });
+      return separated
+        ? { ok: true }
+        : {
+            ok: false,
+            detail:
+              "同じVLAN内のPC同士は通信でき、別VLANのPCとは通信できない状態になっていません。ポートのAccess VLAN設定を確認しましょう。",
+          };
     },
   },
 ];
