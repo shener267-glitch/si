@@ -1,5 +1,5 @@
 import { deviceIconMarkup } from "./icons";
-import { isComputerType } from "./types";
+import { DEFAULT_VLAN_ID, isComputerType } from "./types";
 import type { ClientConfig, Device, DeviceCatalogItem, DeviceType, RouterConfig } from "./types";
 
 // Shop catalog. Ports are templates (capacity/type only); real Port objects
@@ -170,6 +170,14 @@ export function shortLabel(type: DeviceType): string {
 
 const POWERED_TYPES: DeviceType[] = ["router", "switch4", "switch8", "onu", "wifi"];
 
+const VLAN_CAPABLE_TYPES: DeviceType[] = ["switch4", "switch8"];
+
+/** Only switches enforce VLAN membership on their ports (design doc v6 §5-§7); every
+ * other device type is VLAN-transparent. */
+export function isVlanCapable(type: DeviceType): boolean {
+  return VLAN_CAPABLE_TYPES.includes(type);
+}
+
 export function iconFor(type: DeviceType): string {
   return deviceIconMarkup(type);
 }
@@ -212,6 +220,10 @@ export function createDevice(
       type: p.type,
       capacity: p.capacity,
       status: "up",
+      // Switch ports default to access-mode on the default VLAN, so freshly-bought
+      // switches (and every mission written before VLANs existed) behave exactly as
+      // before until the player explicitly reconfigures a port.
+      ...(isVlanCapable(type) ? { vlanMode: "access" as const, accessVlan: DEFAULT_VLAN_ID } : {}),
     })),
   };
   if (type === "router") {

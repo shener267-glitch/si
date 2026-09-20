@@ -25,12 +25,27 @@ export type DeviceCategory = "computer" | "server" | "network" | "wiring";
 
 export type PortType = "WAN" | "LAN" | "ETHERNET" | "WIFI";
 
+/** A logical broadcast domain (design doc v6 §3/§4). VLAN 1 "default" always exists so
+ * every device's ports default into it - existing missions keep working unmodified. */
+export interface Vlan {
+  id: number;
+  name: string;
+}
+
+export const DEFAULT_VLAN_ID = 1;
+
 export interface Port {
   id: string;
   type: PortType;
   /** Max simultaneous connections. undefined/1 = one cable only. null = unlimited (AP radio). */
   capacity?: number | null;
   status: "up" | "down";
+  /** Only meaningful on switch ports (design doc v6 §5/§6). Access ports carry exactly
+   * one VLAN; trunk ports carry a set of VLANs tagged across a switch-to-switch link.
+   * Every other device type's ports are VLAN-transparent regardless of these fields. */
+  vlanMode?: "access" | "trunk";
+  accessVlan?: number;
+  trunkVlans?: number[];
 }
 
 export interface DeviceCatalogItem {
@@ -128,6 +143,7 @@ export interface GameState {
   devices: Device[];
   connections: Connection[];
   rooms: Room[];
+  vlans: Vlan[];
   missionIndex: number;
   missionCleared: Record<string, boolean>;
   mode: GameMode;
@@ -144,6 +160,7 @@ export type DiagStepKey =
   | "power"
   | "cable"
   | "port"
+  | "vlan"
   | "ip"
   | "subnet"
   | "gateway"

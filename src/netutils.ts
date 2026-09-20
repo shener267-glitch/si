@@ -1,6 +1,7 @@
-import { deviceById, neighborsOf } from "./state";
-import { isComputerType } from "./types";
-import type { ClientConfig, Connection, Device, GameState, RouterConfig } from "./types";
+import { isVlanCapable } from "./devices";
+import { connectionsOf, deviceById, neighborsOf } from "./state";
+import { DEFAULT_VLAN_ID, isComputerType } from "./types";
+import type { ClientConfig, Connection, Device, GameState, Port, RouterConfig } from "./types";
 
 export function ipToInt(ip: string | undefined): number | null {
   if (!ip) return null;
@@ -62,24 +63,80 @@ export function findL2Domain(
   return { router, memberIds };
 }
 
-/** PC/Server devices reachable from a router without crossing another router/ONU/Internet. */
-export function domainClientsOfRouter(state: GameState, routerId: string): Device[] {
-  const visited = new Set<string>([routerId]);
-  const queue: string[] = [routerId];
-  const clients: Device[] = [];
+/**
+ * Applies a switch port's VLAN filter to a frame carrying `vlan` (null = not yet
+ * constrained by any switch). Returns the VLAN the frame continues with, or "blocked"
+ * if this port's config doesn't allow it through (design doc v6 §5/§6). Ports on any
+ * non-switch device are VLAN-transparent - only switches enforce membership.
+ */
+function applyPortVlanFilter(device: Device, port: Port, vlan: number | null): number | "blocked" | null {
+  if (!isVlanCapable(device.type)) return vlan;
+  if (port.vlanMode === "trunk") {
+    if (vlan === null) return "blocked";
+    return (port.trunkVlans ?? []).includes(vlan) ? vlan : "blocked";
+  }
+  const accessVlan = port.accessVlan ?? DEFAULT_VLAN_ID;
+  if (vlan === null) return accessVlan;
+  return vlan === accessVlan ? vlan : "blocked";
+}
+
+function portOnDevice(device: Device, conn: Connection): Port | undefined {
+  const portId = conn.fromDevice === device.id ? conn.fromPort : conn.toPort;
+  return device.ports.find((p) => p.id === portId);
+}
+
+/**
+ * VLAN-aware counterpart to `findL2Domain`: BFS from a device, but a hop across a
+ * switch port only continues if that port's access VLAN / trunk VLAN list allows the
+ * VLAN currently in play (design doc v6 §3-§6). With every port left at its default
+ * (access, VLAN 1), this returns exactly what `findL2Domain` would.
+ */
+export function findVlanDomain(
+  state: GameState,
+  startId: string
+): { router: Device | null; memberIds: Set<string> } {
+  const start = deviceById(state, startId);
+  if (!start) return { router: null, memberIds: new Set() };
+  const memberIds = new Set<string>([startId]);
+  const visited = new Set<string>([`${startId}:null`]);
+  let router: Device | null = null;
+  const queue: Array<{ device: Device; vlan: number | null }> = [{ device: start, vlan: null }];
   while (queue.length) {
-    const currentId = queue.shift()!;
-    for (const neighbor of neighborsOf(state, currentId)) {
-      if (visited.has(neighbor.id)) continue;
-      visited.add(neighbor.id);
-      if (neighbor.type === "router" || neighbor.type === "onu" || neighbor.type === "internet") {
+    const { device: current, vlan } = queue.shift()!;
+    for (const conn of connectionsOf(state, current.id)) {
+      const otherId = conn.fromDevice === current.id ? conn.toDevice : conn.fromDevice;
+      const neighbor = deviceById(state, otherId);
+      const exitPort = portOnDevice(current, conn);
+      if (!neighbor || !exitPort) continue;
+      const vlanAfterExit = applyPortVlanFilter(current, exitPort, vlan);
+      if (vlanAfterExit === "blocked") continue;
+      const entryPort = portOnDevice(neighbor, conn);
+      if (!entryPort) continue;
+      const vlanAfterEntry = applyPortVlanFilter(neighbor, entryPort, vlanAfterExit);
+      if (vlanAfterEntry === "blocked") continue;
+      const key = `${neighbor.id}:${vlanAfterEntry}`;
+      if (visited.has(key)) continue;
+      visited.add(key);
+      if (neighbor.type === "router") {
+        if (!router) router = neighbor;
         continue;
       }
-      if (isComputerType(neighbor.type) || neighbor.type === "server") clients.push(neighbor);
-      queue.push(neighbor.id);
+      if (neighbor.type === "onu" || neighbor.type === "internet") continue;
+      memberIds.add(neighbor.id);
+      queue.push({ device: neighbor, vlan: vlanAfterEntry });
     }
   }
-  return clients;
+  return { router, memberIds };
+}
+
+/** VLAN-aware counterpart to `domainClientsOfRouter` - only clients whose VLAN path
+ * back to the router isn't blocked by an access/trunk mismatch are included, so DHCP
+ * and duplicate-IP checks respect VLAN isolation (design doc v6 §5/§11). */
+export function vlanDomainClientsOfRouter(state: GameState, routerId: string): Device[] {
+  const { memberIds } = findVlanDomain(state, routerId);
+  return state.devices.filter(
+    (d) => memberIds.has(d.id) && (isComputerType(d.type) || d.type === "server")
+  );
 }
 
 /** Does the router have a physical path (through ONU or otherwise) to the fixed Internet node? */
@@ -167,7 +224,7 @@ export function resolveAllConfigs(state: GameState): Map<string, ResolvedConfig>
   for (const router of routers) {
     const rc = router.networkConfig as RouterConfig;
     if (!rc.dhcpEnabled) continue;
-    const domainClients = domainClientsOfRouter(state, router.id);
+    const domainClients = vlanDomainClientsOfRouter(state, router.id);
     const usedIps = new Set<string>();
     for (const c of domainClients) {
       const ip = result.get(c.id)?.ip;
@@ -212,7 +269,7 @@ export function resolveAllConfigs(state: GameState): Map<string, ResolvedConfig>
   }
 
   for (const router of routers) {
-    const domainClients = domainClientsOfRouter(state, router.id);
+    const domainClients = vlanDomainClientsOfRouter(state, router.id);
     const byIp = new Map<string, Device[]>();
     for (const c of domainClients) {
       const ip = result.get(c.id)?.ip;
