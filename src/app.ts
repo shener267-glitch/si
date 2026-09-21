@@ -1473,9 +1473,9 @@ export class App {
           <button class="close-btn" data-close="buildingOutline">✕</button>
         </div>
         <p class="building-outline-note">
-          ユーザー提供の間取り図から目視でトレースした本庁舎・別館の外形です。まだ壁・部屋・
-          ドア・窓・家具は含まれていません（design doc §22 Phase 1）。実際の図面とずれている
-          箇所があれば教えてください。
+          ユーザー提供の間取り図をベクター化したデータから、壁線の輪郭をそのまま抽出した
+          本庁舎・別館の外形です。まだ壁・部屋・ドア・窓・家具は含まれていません（design doc
+          §22 Phase 1）。実際の図面とずれている箇所があれば教えてください。
         </p>
         <div class="building-outline-grid">
           ${BUILDING_OUTLINES.map(panel).join("")}
