@@ -1527,6 +1527,24 @@ body {
   stroke-width: 1.4;
 }
 
+/* Phase 3 - doors: a short line across the wall opening, in a distinct color from the
+   plain wall/pillar linework so it reads as an opening rather than more wall. */
+.building-outline-door {
+  stroke: #ff5c7a;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+/* Phase 3 - stairs: a small arrow along the walk-up direction the user marked. */
+.building-outline-stair line {
+  stroke: #ffb84d;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.building-outline-stair path {
+  fill: #ffb84d;
+}
+
 /* toast */
 .toast {
   position: absolute;
