@@ -1,5 +1,5 @@
 import { BOOK_CATEGORIES, findBookPage } from "./book";
-import { BUILDING_OUTLINES } from "./building";
+import { BUILDING_OUTLINES, type DoorMarker, type StairArrow } from "./building";
 import { cableLengthMeters, isCableTooLong } from "./cables";
 import {
   CATEGORY_LABELS,
@@ -1450,6 +1450,15 @@ export class App {
    * §24）。部屋・ドア・窓・家具などはPhase 3以降でここに積み上げていく。 */
   private renderBuildingOutline(): string {
     if (!this.ui.showBuildingOutline) return "";
+    const door = (d: DoorMarker) => {
+      const half = d.length / 2;
+      const [x1, y1, x2, y2] = d.vertical ? [d.x, d.y - half, d.x, d.y + half] : [d.x - half, d.y, d.x + half, d.y];
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="building-outline-door" />`;
+    };
+    const stair = (s: StairArrow) => `<g transform="translate(${s.x},${s.y}) rotate(${s.angleDeg})" class="building-outline-stair">
+      <line x1="-15" y1="0" x2="15" y2="0" />
+      <path d="M 15,0 L 4,-7 L 4,7 Z" />
+    </g>`;
     const panel = (outline: (typeof BUILDING_OUTLINES)[number]) => {
       const pad = 12;
       const { width, height } = outline.viewBox;
@@ -1459,20 +1468,23 @@ export class App {
           <path d="${outline.outlinePath}" class="building-outline-shape" />
           <path d="${outline.wallsPath}" class="building-outline-walls" />
           <path d="${outline.pillarsPath}" class="building-outline-pillars" />
+          ${outline.doors.map(door).join("")}
+          ${outline.stairs.map(stair).join("")}
         </svg>
       </div>`;
     };
     return `<div class="overlay" data-overlay="buildingOutline">
       <div class="sheet sheet--tall">
         <div class="sheet-header">
-          <h2>🏛 建物外形・壁（下書き・Phase 1-2）</h2>
+          <h2>🏛 建物外形・壁・ドア・階段（下書き・Phase 1-3）</h2>
           <button class="close-btn" data-close="buildingOutline">✕</button>
         </div>
         <p class="building-outline-note">
           ユーザー提供の間取り図をベクター化したデータから直接抽出した、本庁舎・別館の
-          外形（Phase 1）と壁（Phase 2、太さのある二重線として表示）です。まだ部屋・ドア・
-          窓・家具は含まれていません（design doc §22）。実際の図面とずれている箇所が
-          あれば教えてください。
+          外形（Phase 1）と壁（Phase 2、太さのある二重線として表示）です。ドア（赤い短い
+          線）と階段の上り方向（オレンジの矢印）は、ユーザーが元図面に直接書き込んだ位置を
+          そのまま反映しています（Phase 3）。まだ部屋・窓・家具は含まれていません
+          （design doc §22）。実際の図面とずれている箇所があれば教えてください。
         </p>
         <div class="building-outline-grid">
           ${BUILDING_OUTLINES.map(panel).join("")}
