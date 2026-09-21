@@ -1508,6 +1508,16 @@ body {
   stroke-linejoin: round;
 }
 
+/* Phase 2 walls - stroke only (no fill): a filled evenodd render turns the one
+   color-filled room in the source drawing (議会事務局) into a solid black blob, since
+   its subpath wasn't traced as a hollow double line like every other wall. Stroking
+   instead sidesteps that entirely and still reads as a wall with real thickness. */
+.building-outline-walls {
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-width: 1.4;
+}
+
 /* toast */
 .toast {
   position: absolute;
