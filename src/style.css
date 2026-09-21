@@ -1579,6 +1579,14 @@ body {
   pointer-events: none;
 }
 
+/* 床材をリアルにする第一歩: feTurbulenceで作った木目のノイズを、板張り
+   パターン（defs内のpattern）の上にmultiplyで重ねて、単なる塗りつぶしでは
+   出ない木の質感を足している。 */
+.building-outline-grain {
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
 /* toast */
 .toast {
   position: absolute;

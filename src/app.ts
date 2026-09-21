@@ -1467,11 +1467,34 @@ export class App {
         <div class="building-outline-label">${outline.label}</div>
         <svg viewBox="${-pad} ${-pad} ${width + pad * 2} ${height + pad * 2}" class="building-outline-svg">
           <defs>
-            <linearGradient id="floor-${gid}" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stop-color="#3a3226" />
-              <stop offset="55%" stop-color="#2c2620" />
-              <stop offset="100%" stop-color="#221d18" />
-            </linearGradient>
+            <pattern id="wood-${gid}" width="132" height="48" patternUnits="userSpaceOnUse" patternTransform="rotate(3)">
+              <rect width="132" height="48" fill="#352c1f" />
+              <rect x="0" y="0" width="130" height="22" fill="#3d3222" />
+              <rect x="66" y="24" width="130" height="22" fill="#39301f" />
+              <rect x="-66" y="24" width="130" height="22" fill="#3b3221" />
+              <g stroke="#1c160e" stroke-width="1" opacity="0.7">
+                <line x1="0" y1="0" x2="132" y2="0" />
+                <line x1="0" y1="24" x2="132" y2="24" />
+                <line x1="66" y1="24" x2="66" y2="48" />
+                <line x1="0" y1="0" x2="0" y2="24" />
+              </g>
+              <g stroke="#5a4a30" stroke-width="0.6" opacity="0.35">
+                <line x1="8" y1="3" x2="120" y2="5" />
+                <line x1="14" y1="12" x2="118" y2="10" />
+                <line x1="10" y1="18" x2="122" y2="19" />
+                <line x1="74" y1="27" x2="186" y2="29" />
+                <line x1="80" y1="36" x2="184" y2="34" />
+                <line x1="76" y1="42" x2="188" y2="43" />
+              </g>
+            </pattern>
+            <filter id="grain-${gid}" x="-20%" y="-20%" width="140%" height="140%">
+              <feTurbulence type="fractalNoise" baseFrequency="0.012 0.28" numOctaves="3" seed="11" result="n" />
+              <feColorMatrix
+                in="n"
+                type="matrix"
+                values="0 0 0 0 0.12  0 0 0 0 0.08  0 0 0 0 0.04  0 0 0 0.55 0"
+              />
+            </filter>
             <radialGradient id="light-${gid}" cx="20%" cy="10%" r="90%">
               <stop offset="0%" stop-color="#ffffff" stop-opacity="0.16" />
               <stop offset="45%" stop-color="#ffffff" stop-opacity="0.05" />
@@ -1481,8 +1504,16 @@ export class App {
               <path d="${outline.outlinePath}" />
             </clipPath>
           </defs>
-          <path d="${outline.outlinePath}" fill="url(#floor-${gid})" class="building-outline-shape" />
+          <path d="${outline.outlinePath}" fill="url(#wood-${gid})" class="building-outline-shape" />
           <g clip-path="url(#clip-${gid})">
+            <rect
+              x="${-pad}"
+              y="${-pad}"
+              width="${width + pad * 2}"
+              height="${height + pad * 2}"
+              filter="url(#grain-${gid})"
+              class="building-outline-grain"
+            />
             <path d="${outline.wallsPath}" class="building-outline-wall-shadow" />
           </g>
           <path d="${outline.wallsPath}" class="building-outline-walls" />
