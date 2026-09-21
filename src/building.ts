@@ -161,9 +161,9 @@ export const HONCHO_1F_BEKKAN: BuildingOutline = {
     { x: 1160.8, y: 661.8, length: 8, vertical: false },
     { x: 427.8, y: 699.8, length: 8, vertical: true },
     { x: 336.8, y: 745.3, length: 8, vertical: true },
-    { x: 1799.0, y: 236.0, length: 6, vertical: true },
-    { x: 1799.0, y: 276.0, length: 6, vertical: true },
-    { x: 1799.0, y: 316.0, length: 6, vertical: true },
+    { x: 1799.0, y: 277.0, length: 6, vertical: true },
+    { x: 1799.0, y: 320.0, length: 6, vertical: true },
+    { x: 1799.0, y: 366.0, length: 6, vertical: true },
   ],
   stairs: [
     { x: 1188.2, y: 332.7, angleDeg: 0 },
