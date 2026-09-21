@@ -323,4 +323,34 @@ export const MISSIONS: Mission[] = [
           };
     },
   },
+  {
+    id: "m12",
+    title: "案件12",
+    description:
+      "L3スイッチを導入し、住民課（VLAN10）・健康福祉課（VLAN20）のPCが、それぞれ自分のVLANのルーティングインターフェース（SVI）経由でインターネットに接続できるようにせよ",
+    reward: 350_000,
+    client: "○○村役場 総務課",
+    deadline: "納期：5日後",
+    budgetHint: "予算目安：¥400,000",
+    requirements: [
+      "L3スイッチを導入し、VLANごとにルーティングインターフェース（SVI）を設定してください。",
+      "住民課・健康福祉課、それぞれのPCがインターネットに接続できるようにしてください。",
+      "各部署のPCのデフォルトゲートウェイは、ルーターではなくL3スイッチのSVIを指すようにしてください。",
+    ],
+    check: (state) => {
+      const pcs = state.devices.filter((d) => isComputerType(d.type) && d.x !== null);
+      const onlineViaL3 = pcs.filter((d) => {
+        if (!diagnoseDevice(state, d.id).success) return false;
+        return findVlanDomain(state, d.id).l3Switch !== null;
+      });
+      const vlanSet = new Set(onlineViaL3.map((d) => findVlanDomain(state, d.id).l3SwitchVlan));
+      const ok = onlineViaL3.length >= 2 && vlanSet.size >= 2;
+      return ok
+        ? { ok: true }
+        : {
+            ok: false,
+            detail: "L3スイッチのSVI経由で2つ以上のVLANがそれぞれインターネットに接続できている状態になっていません。",
+          };
+    },
+  },
 ];

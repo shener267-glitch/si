@@ -6,6 +6,7 @@ export type DeviceType =
   | "router"
   | "switch4"
   | "switch8"
+  | "l3_switch"
   | "onu"
   | "wifi"
   | "lan_jack"
@@ -87,7 +88,29 @@ export interface ClientConfig {
   dns?: string;
 }
 
-export type NetworkConfig = RouterConfig | ClientConfig;
+/** One routed interface (SVI) an L3 switch (design doc v6 §7-§9) holds for a single
+ * VLAN - the gateway address devices on that VLAN use, and optionally its own DHCP
+ * scope. A VLAN without an interface here still switches normally at L2 through the
+ * same device; only VLANs with an interface get routed. */
+export interface L3SwitchInterface {
+  vlanId: number;
+  ip: string;
+  subnetMask: string;
+  dhcpEnabled: boolean;
+  dhcpStart?: string;
+  dhcpEnd?: string;
+}
+
+/** An L3 switch's config: one interface per VLAN it routes, plus a single static
+ * uplink to the router's LAN IP for anything outside its own VLANs (this game only
+ * ever has one router, so one uplink is enough - real multi-route tables are
+ * deferred). */
+export interface L3SwitchConfig {
+  interfaces: L3SwitchInterface[];
+  uplinkGateway?: string;
+}
+
+export type NetworkConfig = RouterConfig | ClientConfig | L3SwitchConfig;
 
 export interface Device {
   id: string;

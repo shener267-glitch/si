@@ -1,7 +1,15 @@
 import { isVlanCapable } from "./devices";
 import { connectionsOf, deviceById, neighborsOf } from "./state";
 import { DEFAULT_VLAN_ID, isComputerType } from "./types";
-import type { ClientConfig, Connection, Device, GameState, Port, RouterConfig } from "./types";
+import type {
+  ClientConfig,
+  Connection,
+  Device,
+  GameState,
+  L3SwitchConfig,
+  Port,
+  RouterConfig,
+} from "./types";
 
 export function ipToInt(ip: string | undefined): number | null {
   if (!ip) return null;
@@ -85,22 +93,34 @@ function portOnDevice(device: Device, conn: Connection): Port | undefined {
   return device.ports.find((p) => p.id === portId);
 }
 
+export interface VlanDomainResult {
+  router: Device | null;
+  /** The first L3 switch (design doc v6 §7-§9) whose routed interface (SVI) the
+   * traversal's own VLAN matched - a routing boundary, like `router`, rather than an
+   * ordinary L2 hop. Null when no L3 switch sits between the start device and a router. */
+  l3Switch: Device | null;
+  /** The VLAN that was active when `l3Switch` was reached - i.e. which of its SVIs applies. */
+  l3SwitchVlan: number | null;
+  memberIds: Set<string>;
+}
+
 /**
- * VLAN-aware counterpart to `findL2Domain`: BFS from a device, but a hop across a
- * switch port only continues if that port's access VLAN / trunk VLAN list allows the
- * VLAN currently in play (design doc v6 §3-§6). With every port left at its default
- * (access, VLAN 1), this returns exactly what `findL2Domain` would.
+ * VLAN-aware BFS shared by `findVlanDomain` (seeded at a real device) and the
+ * L3-switch-side lookups below (seeded directly at a switch with a specific VLAN, as
+ * if a routed packet were exiting one of its interfaces). A hop across a switch port
+ * only continues if that port's access VLAN / trunk VLAN list allows the VLAN
+ * currently in play (design doc v6 §3-§6). With every port left at its default
+ * (access, VLAN 1) and seedVlan null, this returns exactly what `findL2Domain` would.
  */
-export function findVlanDomain(
-  state: GameState,
-  startId: string
-): { router: Device | null; memberIds: Set<string> } {
+function vlanBfs(state: GameState, startId: string, seedVlan: number | null): VlanDomainResult {
   const start = deviceById(state, startId);
-  if (!start) return { router: null, memberIds: new Set() };
+  if (!start) return { router: null, l3Switch: null, l3SwitchVlan: null, memberIds: new Set() };
   const memberIds = new Set<string>([startId]);
-  const visited = new Set<string>([`${startId}:null`]);
+  const visited = new Set<string>([`${startId}:${seedVlan}`]);
   let router: Device | null = null;
-  const queue: Array<{ device: Device; vlan: number | null }> = [{ device: start, vlan: null }];
+  let l3Switch: Device | null = null;
+  let l3SwitchVlan: number | null = null;
+  const queue: Array<{ device: Device; vlan: number | null }> = [{ device: start, vlan: seedVlan }];
   while (queue.length) {
     const { device: current, vlan } = queue.shift()!;
     for (const conn of connectionsOf(state, current.id)) {
@@ -121,12 +141,32 @@ export function findVlanDomain(
         if (!router) router = neighbor;
         continue;
       }
+      if (neighbor.type === "l3_switch" && neighbor.id !== startId && vlanAfterEntry !== null) {
+        const l3cfg = neighbor.networkConfig as L3SwitchConfig;
+        if (l3cfg.interfaces.some((i) => i.vlanId === vlanAfterEntry)) {
+          // This VLAN is routed here - a boundary, not a plain L2 hop, so BFS stops.
+          // A VLAN this switch has no SVI for still switches through it normally below.
+          if (!l3Switch) {
+            l3Switch = neighbor;
+            l3SwitchVlan = vlanAfterEntry;
+          }
+          continue;
+        }
+      }
       if (neighbor.type === "onu" || neighbor.type === "internet") continue;
       memberIds.add(neighbor.id);
       queue.push({ device: neighbor, vlan: vlanAfterEntry });
     }
   }
-  return { router, memberIds };
+  return { router, l3Switch, l3SwitchVlan, memberIds };
+}
+
+/**
+ * VLAN-aware counterpart to `findL2Domain`: BFS from a device, stopping at (but
+ * recording) the first router or L3-switch-SVI boundary it hits (design doc v6 §3-§9).
+ */
+export function findVlanDomain(state: GameState, startId: string): VlanDomainResult {
+  return vlanBfs(state, startId, null);
 }
 
 /** VLAN-aware counterpart to `domainClientsOfRouter` - only clients whose VLAN path
@@ -200,12 +240,26 @@ export interface ResolvedConfig {
   duplicateOf?: string;
 }
 
+/** A DHCP scope + duplicate-IP domain: one per router LAN, and one per VLAN interface
+ * (SVI) an L3 switch routes (design doc v6 §7-§9) - each addresses its own clients
+ * independently, exactly like a router's LAN does. */
+interface AddressScope {
+  clients: Device[];
+  dhcpEnabled: boolean;
+  dhcpStart?: string;
+  dhcpEnd?: string;
+  subnetMask: string;
+  gateway: string;
+  dns: string;
+}
+
 export function resolveAllConfigs(state: GameState): Map<string, ResolvedConfig> {
   const result = new Map<string, ResolvedConfig>();
   const clients = state.devices.filter(
     (d) => (isComputerType(d.type) || d.type === "server") && d.x !== null
   );
   const routers = state.devices.filter((d) => d.type === "router" && d.x !== null);
+  const l3Switches = state.devices.filter((d) => d.type === "l3_switch" && d.x !== null);
 
   for (const client of clients) {
     const cfg = client.networkConfig as ClientConfig | undefined;
@@ -221,20 +275,49 @@ export function resolveAllConfigs(state: GameState): Map<string, ResolvedConfig>
     }
   }
 
+  const scopes: AddressScope[] = [];
   for (const router of routers) {
     const rc = router.networkConfig as RouterConfig;
-    if (!rc.dhcpEnabled) continue;
-    const domainClients = vlanDomainClientsOfRouter(state, router.id);
+    scopes.push({
+      clients: vlanDomainClientsOfRouter(state, router.id),
+      dhcpEnabled: rc.dhcpEnabled,
+      dhcpStart: rc.dhcpStart,
+      dhcpEnd: rc.dhcpEnd,
+      subnetMask: rc.subnetMask,
+      gateway: rc.lanIp,
+      dns: rc.lanIp,
+    });
+  }
+  for (const l3 of l3Switches) {
+    const l3cfg = l3.networkConfig as L3SwitchConfig;
+    for (const iface of l3cfg.interfaces) {
+      scopes.push({
+        clients: clients.filter((c) => {
+          const vd = findVlanDomain(state, c.id);
+          return vd.l3Switch?.id === l3.id && vd.l3SwitchVlan === iface.vlanId;
+        }),
+        dhcpEnabled: iface.dhcpEnabled,
+        dhcpStart: iface.dhcpStart,
+        dhcpEnd: iface.dhcpEnd,
+        subnetMask: iface.subnetMask,
+        gateway: iface.ip,
+        dns: iface.ip,
+      });
+    }
+  }
+
+  for (const scope of scopes) {
+    if (!scope.dhcpEnabled) continue;
     const usedIps = new Set<string>();
-    for (const c of domainClients) {
+    for (const c of scope.clients) {
       const ip = result.get(c.id)?.ip;
       if (ip) usedIps.add(ip);
     }
-    const startInt = ipToInt(rc.dhcpStart);
-    const endInt = ipToInt(rc.dhcpEnd);
+    const startInt = ipToInt(scope.dhcpStart);
+    const endInt = ipToInt(scope.dhcpEnd);
     if (startInt === null || endInt === null) continue;
     let cursor = startInt;
-    for (const client of domainClients) {
+    for (const client of scope.clients) {
       const cfg = client.networkConfig as ClientConfig | undefined;
       if (!cfg?.dhcpEnabled) continue;
       let assigned: string | null = null;
@@ -250,9 +333,9 @@ export function resolveAllConfigs(state: GameState): Map<string, ResolvedConfig>
         usedIps.add(assigned);
         result.set(client.id, {
           ip: assigned,
-          subnetMask: rc.subnetMask,
-          gateway: rc.lanIp,
-          dns: rc.lanIp,
+          subnetMask: scope.subnetMask,
+          gateway: scope.gateway,
+          dns: scope.dns,
         });
       } else {
         result.set(client.id, { dhcpFailed: true });
@@ -268,10 +351,9 @@ export function resolveAllConfigs(state: GameState): Map<string, ResolvedConfig>
     }
   }
 
-  for (const router of routers) {
-    const domainClients = vlanDomainClientsOfRouter(state, router.id);
+  for (const scope of scopes) {
     const byIp = new Map<string, Device[]>();
-    for (const c of domainClients) {
+    for (const c of scope.clients) {
       const ip = result.get(c.id)?.ip;
       if (!ip) continue;
       const list = byIp.get(ip) ?? [];

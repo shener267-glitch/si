@@ -1,6 +1,6 @@
 import { deviceIconMarkup } from "./icons";
 import { DEFAULT_VLAN_ID, isComputerType } from "./types";
-import type { ClientConfig, Device, DeviceCatalogItem, DeviceType, RouterConfig } from "./types";
+import type { ClientConfig, Device, DeviceCatalogItem, DeviceType, L3SwitchConfig, RouterConfig } from "./types";
 
 // Shop catalog. Ports are templates (capacity/type only); real Port objects
 // with unique ids get stamped out per-device in createDevice(). `specifications` is the
@@ -75,6 +75,21 @@ export const DEVICE_CATALOG: DeviceCatalogItem[] = [
     description: "8台までの機器をまとめて接続できる。",
     ports: Array.from({ length: 8 }, () => ({ type: "ETHERNET" as const })),
     specifications: { ポート数: "8", 速度: "1000Mbps", PoE給電: "非対応" },
+  },
+  {
+    type: "l3_switch",
+    category: "network",
+    label: "L3スイッチ",
+    price: 220_000,
+    description:
+      "VLANごとにルーティングインターフェース（SVI）を持てるスイッチ。異なるVLAN同士を、ルーターを介さず直接中継できる。",
+    ports: Array.from({ length: 8 }, () => ({ type: "ETHERNET" as const })),
+    specifications: {
+      ポート数: "8",
+      速度: "1000Mbps",
+      "VLAN間ルーティング": "対応（SVI・VLANごとに1つ）",
+      PoE給電: "非対応",
+    },
   },
   {
     type: "onu",
@@ -153,6 +168,8 @@ export function shortLabel(type: DeviceType): string {
     case "switch4":
     case "switch8":
       return "Switch";
+    case "l3_switch":
+      return "L3SW";
     case "onu":
       return "ONU";
     case "wifi":
@@ -168,9 +185,9 @@ export function shortLabel(type: DeviceType): string {
   }
 }
 
-const POWERED_TYPES: DeviceType[] = ["router", "switch4", "switch8", "onu", "wifi"];
+const POWERED_TYPES: DeviceType[] = ["router", "switch4", "switch8", "l3_switch", "onu", "wifi"];
 
-const VLAN_CAPABLE_TYPES: DeviceType[] = ["switch4", "switch8"];
+const VLAN_CAPABLE_TYPES: DeviceType[] = ["switch4", "switch8", "l3_switch"];
 
 /** Only switches enforce VLAN membership on their ports (design doc v6 §5-§7); every
  * other device type is VLAN-transparent. */
@@ -196,6 +213,10 @@ function defaultRouterConfig(): RouterConfig {
 function defaultClientConfig(type: DeviceType): ClientConfig {
   // Servers conventionally get a static IP; computers default to DHCP.
   return { dhcpEnabled: type !== "server" };
+}
+
+function defaultL3SwitchConfig(): L3SwitchConfig {
+  return { interfaces: [], uplinkGateway: undefined };
 }
 
 export function createDevice(
@@ -228,6 +249,8 @@ export function createDevice(
   };
   if (type === "router") {
     device.networkConfig = defaultRouterConfig();
+  } else if (type === "l3_switch") {
+    device.networkConfig = defaultL3SwitchConfig();
   } else if (isComputerType(type) || type === "server") {
     device.networkConfig = defaultClientConfig(type);
   }
