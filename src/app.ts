@@ -1445,37 +1445,34 @@ export class App {
   }
 
   /** V7.1建物再構築の Phase 1（design doc §22）専用プレビュー。ユーザー提供の間取り図
-   * から目視でトレースした建物外形（本庁舎1F/2F・別館）を並べて表示するだけで、
-   * 既存の部屋・機器・案件データには一切触れていない（design doc §24）。壁・部屋・
-   * 家具などはPhase 2以降でここに積み上げていく。 */
+   * をベクター化（SVG）したデータから直接抽出した建物外形（Phase 1）と壁（Phase 2）を
+   * 並べて表示するだけで、既存の部屋・機器・案件データには一切触れていない（design doc
+   * §24）。部屋・ドア・窓・家具などはPhase 3以降でここに積み上げていく。 */
   private renderBuildingOutline(): string {
     if (!this.ui.showBuildingOutline) return "";
     const panel = (outline: (typeof BUILDING_OUTLINES)[number]) => {
-      const xs = outline.points.map((p) => p[0]);
-      const ys = outline.points.map((p) => p[1]);
       const pad = 12;
-      const minX = Math.min(...xs) - pad;
-      const minY = Math.min(...ys) - pad;
-      const w = Math.max(...xs) - Math.min(...xs) + pad * 2;
-      const h = Math.max(...ys) - Math.min(...ys) + pad * 2;
-      const pts = outline.points.map(([x, y]) => `${x},${y}`).join(" ");
+      const { width, height } = outline.viewBox;
       return `<div class="building-outline-panel">
         <div class="building-outline-label">${outline.label}</div>
-        <svg viewBox="${minX} ${minY} ${w} ${h}" class="building-outline-svg">
-          <polygon points="${pts}" class="building-outline-shape" />
+        <svg viewBox="${-pad} ${-pad} ${width + pad * 2} ${height + pad * 2}" class="building-outline-svg">
+          <path d="${outline.outlinePath}" class="building-outline-shape" />
+          <path d="${outline.wallsPath}" class="building-outline-walls" />
+          <path d="${outline.pillarsPath}" class="building-outline-pillars" />
         </svg>
       </div>`;
     };
     return `<div class="overlay" data-overlay="buildingOutline">
       <div class="sheet sheet--tall">
         <div class="sheet-header">
-          <h2>🏛 建物外形（下書き・Phase 1）</h2>
+          <h2>🏛 建物外形・壁（下書き・Phase 1-2）</h2>
           <button class="close-btn" data-close="buildingOutline">✕</button>
         </div>
         <p class="building-outline-note">
-          ユーザー提供の間取り図をベクター化したデータから、壁線の輪郭をそのまま抽出した
-          本庁舎・別館の外形です。まだ壁・部屋・ドア・窓・家具は含まれていません（design doc
-          §22 Phase 1）。実際の図面とずれている箇所があれば教えてください。
+          ユーザー提供の間取り図をベクター化したデータから直接抽出した、本庁舎・別館の
+          外形（Phase 1）と壁（Phase 2、太さのある二重線として表示）です。まだ部屋・ドア・
+          窓・家具は含まれていません（design doc §22）。実際の図面とずれている箇所が
+          あれば教えてください。
         </p>
         <div class="building-outline-grid">
           ${BUILDING_OUTLINES.map(panel).join("")}
