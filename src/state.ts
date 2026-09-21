@@ -2,7 +2,15 @@ import { catalogItem, createDevice, shortLabel } from "./devices";
 import { DEFAULT_ROOMS } from "./rooms";
 import { validatePhysicalConnection } from "./rules";
 import { DEFAULT_VLAN_ID, isComputerType } from "./types";
-import type { ClientConfig, Connection, Device, DeviceType, GameState, RouterConfig } from "./types";
+import type {
+  ClientConfig,
+  Connection,
+  Device,
+  DeviceType,
+  GameState,
+  L3SwitchConfig,
+  RouterConfig,
+} from "./types";
 
 const OFFICE_WIDTH = 640;
 const OFFICE_HEIGHT = 1100;
@@ -184,6 +192,17 @@ export function updateRouterConfig(
   const device = deviceById(state, deviceId);
   if (!device || device.type !== "router") return;
   const current = device.networkConfig as RouterConfig;
+  device.networkConfig = { ...current, ...patch };
+}
+
+export function updateL3SwitchConfig(
+  state: GameState,
+  deviceId: string,
+  patch: Partial<L3SwitchConfig>
+): void {
+  const device = deviceById(state, deviceId);
+  if (!device || device.type !== "l3_switch") return;
+  const current = device.networkConfig as L3SwitchConfig;
   device.networkConfig = { ...current, ...patch };
 }
 

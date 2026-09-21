@@ -18,6 +18,7 @@ import type {
   DiagStep,
   DiagStepKey,
   GameState,
+  L3SwitchConfig,
   PingResult,
   RouterConfig,
 } from "./types";
@@ -192,11 +193,12 @@ export function diagnoseDevice(state: GameState, deviceId: string): DeviceDiagno
   steps.push(ok("port"));
 
   // 5. VLAN - the physical route above exists, but a switch access/trunk port along
-  // the way may still keep this device's VLAN from ever reaching the router's VLAN
-  // (design doc v6 §3-§6). Checked separately from "physical" so the message is clear:
-  // the cable is fine, the logical network segmentation is what's blocking it.
+  // the way may still keep this device's VLAN from ever reaching a gateway - either
+  // the router directly, or (design doc v6 §7-§9) an L3 switch's routed interface for
+  // this VLAN. Checked separately from "physical" so the message is clear: the cable
+  // is fine, the logical network segmentation is what's blocking it.
   const vlanDomain = findVlanDomain(state, device.id);
-  if (!vlanDomain.router) {
+  if (!vlanDomain.router && !vlanDomain.l3Switch) {
     steps.push(
       fail(
         "vlan",
@@ -231,8 +233,14 @@ export function diagnoseDevice(state: GameState, deviceId: string): DeviceDiagno
   }
   steps.push(ok("subnet", resolved.subnetMask));
 
-  // 8. Gateway
+  // 8. Gateway - either the router directly, or (design doc v6 §7-§9) an L3 switch's
+  // routed interface (SVI) for this device's own VLAN.
   const routerConfig = domain.router.networkConfig as RouterConfig;
+  const l3 = vlanDomain.l3Switch;
+  const l3Iface = l3
+    ? (l3.networkConfig as L3SwitchConfig).interfaces.find((i) => i.vlanId === vlanDomain.l3SwitchVlan)
+    : null;
+  const expectedGateway = l3Iface ? l3Iface.ip : routerConfig.lanIp;
   if (!resolved.gateway) {
     steps.push(fail("gateway", "デフォルトゲートウェイが設定されていません。"));
     return finish(7);
@@ -241,14 +249,35 @@ export function diagnoseDevice(state: GameState, deviceId: string): DeviceDiagno
     steps.push(fail("gateway", `ゲートウェイ（${resolved.gateway}）が自分のサブネットと異なります。`));
     return finish(7);
   }
-  if (resolved.gateway !== routerConfig.lanIp) {
+  if (resolved.gateway !== expectedGateway) {
     steps.push(fail("gateway", `ゲートウェイ（${resolved.gateway}）に到達できません。`));
     return finish(7);
   }
   steps.push(ok("gateway", resolved.gateway));
 
-  // 9. Routing (router -> internet, e.g. via ONU)
-  if (!routerReachesInternet(state, domain.router.id, internetDeviceId())) {
+  // 9. Routing: either the router straight to the Internet (e.g. via ONU), or - when
+  // this device's gateway is an L3 switch - that switch's own uplink to the router
+  // first (design doc v6 §7-§9), then the router onward as usual.
+  if (l3) {
+    const l3cfg = l3.networkConfig as L3SwitchConfig;
+    const uplinkDomain = findVlanDomain(state, l3.id);
+    const uplinkRouterIp = uplinkDomain.router
+      ? (uplinkDomain.router.networkConfig as RouterConfig).lanIp
+      : null;
+    if (!l3cfg.uplinkGateway || uplinkRouterIp !== l3cfg.uplinkGateway) {
+      steps.push(
+        fail(
+          "route",
+          `${l3.name}のアップリンク先ゲートウェイの設定を確認してください（ルーターへの経路が見つかりません）。`
+        )
+      );
+      return finish(8);
+    }
+    if (!routerReachesInternet(state, uplinkDomain.router!.id, internetDeviceId())) {
+      steps.push(fail("route", "ルーターがインターネット回線（ONU）に接続されていません。"));
+      return finish(8);
+    }
+  } else if (!routerReachesInternet(state, domain.router.id, internetDeviceId())) {
     steps.push(fail("route", "ルーターがインターネット回線（ONU）に接続されていません。"));
     return finish(8);
   }
@@ -294,14 +323,34 @@ export function ping(state: GameState, sourceDeviceId: string, targetIp: string)
     // Same LAN: succeeds if some device in the domain actually has that IP.
     const allConfigs = resolveAllConfigs(state);
     const targetInDomain = [...domain.memberIds].some((id) => allConfigs.get(id)?.ip === targetIp);
-    const isGateway = domain.router && (domain.router.networkConfig as RouterConfig).lanIp === targetIp;
+    const isGateway =
+      (domain.router && (domain.router.networkConfig as RouterConfig).lanIp === targetIp) ||
+      (domain.l3Switch &&
+        (domain.l3Switch.networkConfig as L3SwitchConfig).interfaces.some((i) => i.ip === targetIp));
     if (targetInDomain || isGateway) {
       return { target: targetIp, success: true, message: `Reply from ${targetIp}: Success` };
     }
     return { target: targetIp, success: false, message: "Request timed out." };
   }
 
-  // Different subnet: treat as an external ping, needs full path to Internet.
+  // Different subnet, but routed locally through the same L3 switch (design doc v6
+  // §7-§9): inter-VLAN traffic an L3 switch's SVIs carry directly, never touching the
+  // router or the Internet.
+  if (domain.l3Switch) {
+    const allConfigs = resolveAllConfigs(state);
+    const l3cfg = domain.l3Switch.networkConfig as L3SwitchConfig;
+    const isOtherSvi = l3cfg.interfaces.some((i) => i.ip === targetIp);
+    const routedBySameSwitch = state.devices.some(
+      (d) =>
+        allConfigs.get(d.id)?.ip === targetIp &&
+        findVlanDomain(state, d.id).l3Switch?.id === domain.l3Switch!.id
+    );
+    if (isOtherSvi || routedBySameSwitch) {
+      return { target: targetIp, success: true, message: `Reply from ${targetIp}: Success` };
+    }
+  }
+
+  // Different subnet, no local L3 route: treat as an external ping, needs full path to Internet.
   const diag = diagnoseDevice(state, sourceDeviceId);
   const reachesInternet = diag.steps.find((s) => s.key === "internet")?.status === "ok";
   if (reachesInternet) {

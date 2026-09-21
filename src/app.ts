@@ -31,6 +31,7 @@ import {
   togglePower,
   unplacedDevices,
   updateClientConfig,
+  updateL3SwitchConfig,
   updateRouterConfig,
   upsertVlan,
 } from "./state";
@@ -45,6 +46,8 @@ import type {
   DeviceType,
   GameMode,
   GameState,
+  L3SwitchConfig,
+  L3SwitchInterface,
   PingResult,
   RouterConfig,
 } from "./types";
@@ -224,6 +227,7 @@ export class App {
     "server",
     "switch4",
     "switch8",
+    "l3_switch",
     "onu",
     "wifi",
     "lan_jack",
@@ -330,6 +334,25 @@ export class App {
       const cfg = device.networkConfig as RouterConfig;
       rows.push({ label: "LAN IPアドレス", value: cfg.lanIp });
       rows.push({ label: "NAT", value: cfg.natEnabled ? "有効" : "無効", ok: cfg.natEnabled });
+    } else if (device.type === "l3_switch") {
+      const cfg = device.networkConfig as L3SwitchConfig;
+      rows.push({
+        label: "VLAN構成",
+        value: device.ports.map((p, i) => `ポート${i + 1}: ${this.portVlanSummary(p)}`).join(" / "),
+      });
+      rows.push({
+        label: "ルーティングインターフェース（SVI）",
+        value:
+          cfg.interfaces.length > 0
+            ? cfg.interfaces.map((i) => `VLAN${i.vlanId}: ${i.ip}`).join(" / ")
+            : "未設定",
+        ok: cfg.interfaces.length > 0,
+      });
+      rows.push({
+        label: "アップリンク先ゲートウェイ",
+        value: cfg.uplinkGateway || "未設定",
+        ok: !!cfg.uplinkGateway,
+      });
     } else if (isVlanCapable(device.type)) {
       rows.push({
         label: "VLAN構成",
@@ -556,6 +579,39 @@ export class App {
       dhcpEnd,
       natEnabled,
     });
+    this.setToast("設定を保存しました。");
+    this.ui.showSettings = false;
+    this.render();
+  }
+
+  private saveL3SwitchSettings(deviceId: string) {
+    const form = this.root.querySelector<HTMLFormElement>("#settings-form");
+    if (!form) return;
+    const interfaces: L3SwitchInterface[] = [];
+    for (const v of this.state.vlans) {
+      const enabled = (form.elements.namedItem(`l3vlan-${v.id}-enabled`) as HTMLInputElement | null)?.checked;
+      if (!enabled) continue;
+      const ip = (form.elements.namedItem(`l3vlan-${v.id}-ip`) as HTMLInputElement).value.trim();
+      const subnetMask = (form.elements.namedItem(`l3vlan-${v.id}-mask`) as HTMLInputElement).value.trim();
+      const dhcpEnabled = (form.elements.namedItem(`l3vlan-${v.id}-dhcp`) as HTMLInputElement).checked;
+      const dhcpStart = (form.elements.namedItem(`l3vlan-${v.id}-dhcpStart`) as HTMLInputElement).value.trim();
+      const dhcpEnd = (form.elements.namedItem(`l3vlan-${v.id}-dhcpEnd`) as HTMLInputElement).value.trim();
+      if (!isValidIp(ip) || !isValidIp(subnetMask)) {
+        this.setToast(`VLAN ${v.id}のIPアドレス/サブネットマスクの形式が正しくありません。`);
+        return;
+      }
+      if (dhcpEnabled && (!isValidIp(dhcpStart) || !isValidIp(dhcpEnd))) {
+        this.setToast(`VLAN ${v.id}のDHCP範囲の形式が正しくありません。`);
+        return;
+      }
+      interfaces.push({ vlanId: v.id, ip, subnetMask, dhcpEnabled, dhcpStart, dhcpEnd });
+    }
+    const uplinkGateway = (form.elements.namedItem("uplinkGateway") as HTMLInputElement).value.trim();
+    if (uplinkGateway && !isValidIp(uplinkGateway)) {
+      this.setToast("アップリンク先ゲートウェイの形式が正しくありません。");
+      return;
+    }
+    updateL3SwitchConfig(this.state, deviceId, { interfaces, uplinkGateway });
     this.setToast("設定を保存しました。");
     this.ui.showSettings = false;
     this.render();
@@ -957,6 +1013,59 @@ export class App {
     </div>`;
   }
 
+  private renderL3SwitchConfig(device: Device): string {
+    const cfg = device.networkConfig as L3SwitchConfig;
+    const rows = this.state.vlans
+      .map((v) => {
+        const iface = cfg.interfaces.find((i) => i.vlanId === v.id);
+        const enabledClass = `l3-fields-${device.id}-${v.id}`;
+        const dhcpClass = `l3-dhcp-${device.id}-${v.id}`;
+        return `<div class="l3-vlan-row">
+          <label class="field field--checkbox">
+            <input type="checkbox" name="l3vlan-${v.id}-enabled" data-toggle="${enabledClass}" ${
+              iface ? "checked" : ""
+            } />
+            <span>VLAN ${v.id}（${v.name}）にルーティングインターフェースを設定する</span>
+          </label>
+          <div class="l3-fields ${enabledClass}" ${iface ? "" : "hidden"}>
+            <label class="field">
+              <span>IPアドレス（このVLANのゲートウェイ）</span>
+              <input name="l3vlan-${v.id}-ip" type="text" value="${iface?.ip ?? ""}" placeholder="192.168.${v.id}.1" />
+            </label>
+            <label class="field">
+              <span>サブネットマスク</span>
+              <input name="l3vlan-${v.id}-mask" type="text" value="${iface?.subnetMask ?? "255.255.255.0"}" placeholder="255.255.255.0" />
+            </label>
+            <label class="field field--checkbox">
+              <input type="checkbox" name="l3vlan-${v.id}-dhcp" data-toggle="${dhcpClass}" ${
+                iface?.dhcpEnabled ? "checked" : ""
+              } />
+              <span>このVLANにDHCPで払い出す</span>
+            </label>
+            <div class="l3-fields ${dhcpClass}" ${iface?.dhcpEnabled ? "" : "hidden"}>
+              <label class="field">
+                <span>DHCP範囲（開始）</span>
+                <input name="l3vlan-${v.id}-dhcpStart" type="text" value="${iface?.dhcpStart ?? ""}" placeholder="192.168.${v.id}.100" />
+              </label>
+              <label class="field">
+                <span>DHCP範囲（終了）</span>
+                <input name="l3vlan-${v.id}-dhcpEnd" type="text" value="${iface?.dhcpEnd ?? ""}" placeholder="192.168.${v.id}.200" />
+              </label>
+            </div>
+          </div>
+        </div>`;
+      })
+      .join("");
+    return `<div class="l3-switch-config">
+      <div class="port-toggle-label">🌐 VLANごとのルーティングインターフェース（SVI）</div>
+      ${rows}
+      <label class="field">
+        <span>アップリンク先ゲートウェイ（ルーターのIPアドレス）</span>
+        <input name="uplinkGateway" type="text" value="${cfg.uplinkGateway ?? ""}" placeholder="192.168.1.1" />
+      </label>
+    </div>`;
+  }
+
   private renderSettings(): string {
     if (!this.ui.showSettings || !this.ui.settingsDeviceId) return "";
     const device = deviceById(this.state, this.ui.settingsDeviceId);
@@ -971,6 +1080,22 @@ export class App {
             ${this.renderVlanManager()}
             ${this.renderPortVlanConfig(device)}
             ${this.renderPortToggles(device)}
+          </form>
+        </div>
+      </div>`;
+    }
+
+    if (device.type === "l3_switch") {
+      return `<div class="overlay" data-overlay="settings">
+        <div class="sheet">
+          <div class="sheet-header"><h2>⚙ ${device.name} の設定</h2><button class="close-btn" data-close="settings">✕</button></div>
+          <form id="settings-form" class="settings-form">
+            ${this.renderPowerToggle(device)}
+            ${this.renderVlanManager()}
+            ${this.renderPortVlanConfig(device)}
+            ${this.renderL3SwitchConfig(device)}
+            ${this.renderPortToggles(device)}
+            <button type="button" class="save-btn" data-save-l3switch="${device.id}">保存</button>
           </form>
         </div>
       </div>`;
@@ -1613,6 +1738,9 @@ export class App {
     });
     this.root.querySelectorAll<HTMLElement>("[data-save-client]").forEach((btn) => {
       btn.addEventListener("click", () => this.saveClientSettings(btn.dataset.saveClient!));
+    });
+    this.root.querySelectorAll<HTMLElement>("[data-save-l3switch]").forEach((btn) => {
+      btn.addEventListener("click", () => this.saveL3SwitchSettings(btn.dataset.saveL3switch!));
     });
 
     this.root.querySelector<HTMLElement>("[data-ping]")?.addEventListener("click", () => this.handleRunPing());
