@@ -1518,6 +1518,15 @@ body {
   stroke-width: 1.4;
 }
 
+/* Phase 1.5 fix - column (柱) symbols: like the walls, the source draws these as a
+   thin double-line band (not a solid block), so a fill just traces that thin band
+   and looks like a hairline. Stroke-only matches the source and reads correctly. */
+.building-outline-pillars {
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-width: 1.4;
+}
+
 /* toast */
 .toast {
   position: absolute;

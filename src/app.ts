@@ -1451,19 +1451,14 @@ export class App {
   private renderBuildingOutline(): string {
     if (!this.ui.showBuildingOutline) return "";
     const panel = (outline: (typeof BUILDING_OUTLINES)[number]) => {
-      const xs = outline.points.map((p) => p[0]);
-      const ys = outline.points.map((p) => p[1]);
       const pad = 12;
-      const minX = Math.min(...xs) - pad;
-      const minY = Math.min(...ys) - pad;
-      const w = Math.max(...xs) - Math.min(...xs) + pad * 2;
-      const h = Math.max(...ys) - Math.min(...ys) + pad * 2;
-      const pts = outline.points.map(([x, y]) => `${x},${y}`).join(" ");
+      const { width, height } = outline.viewBox;
       return `<div class="building-outline-panel">
         <div class="building-outline-label">${outline.label}</div>
-        <svg viewBox="${minX} ${minY} ${w} ${h}" class="building-outline-svg">
-          <polygon points="${pts}" class="building-outline-shape" />
+        <svg viewBox="${-pad} ${-pad} ${width + pad * 2} ${height + pad * 2}" class="building-outline-svg">
+          <path d="${outline.outlinePath}" class="building-outline-shape" />
           <path d="${outline.wallsPath}" class="building-outline-walls" />
+          <path d="${outline.pillarsPath}" class="building-outline-pillars" />
         </svg>
       </div>`;
     };
