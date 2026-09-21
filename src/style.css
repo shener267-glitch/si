@@ -1467,6 +1467,47 @@ body {
   margin: 0;
 }
 
+/* building outline preview (V7.1 Phase 1 draft) */
+.building-outline-note {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  margin: 0 0 14px;
+}
+
+.building-outline-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.building-outline-panel {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.building-outline-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.building-outline-svg {
+  width: 100%;
+  height: auto;
+  max-height: 260px;
+}
+
+.building-outline-shape {
+  fill: var(--panel);
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linejoin: round;
+}
+
 /* toast */
 .toast {
   position: absolute;
