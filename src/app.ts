@@ -1,4 +1,5 @@
 import { BOOK_CATEGORIES, findBookPage } from "./book";
+import { BUILDING_OUTLINES } from "./building";
 import { cableLengthMeters, isCableTooLong } from "./cables";
 import {
   CATEGORY_LABELS,
@@ -64,6 +65,7 @@ interface UiState {
   showDiagnosis: boolean;
   showInspection: boolean;
   showBook: boolean;
+  showBuildingOutline: boolean;
   showJobLetter: boolean;
   showHelpdesk: boolean;
   helpdeskTicketId: string | null;
@@ -92,6 +94,7 @@ function initialUi(): UiState {
     showDiagnosis: false,
     showInspection: false,
     showBook: false,
+    showBuildingOutline: false,
     showJobLetter: false,
     showHelpdesk: false,
     helpdeskTicketId: null,
@@ -1441,6 +1444,46 @@ export class App {
     </div>`;
   }
 
+  /** V7.1建物再構築の Phase 1（design doc §22）専用プレビュー。ユーザー提供の間取り図
+   * から目視でトレースした建物外形（本庁舎1F/2F・別館）を並べて表示するだけで、
+   * 既存の部屋・機器・案件データには一切触れていない（design doc §24）。壁・部屋・
+   * 家具などはPhase 2以降でここに積み上げていく。 */
+  private renderBuildingOutline(): string {
+    if (!this.ui.showBuildingOutline) return "";
+    const panel = (outline: (typeof BUILDING_OUTLINES)[number]) => {
+      const xs = outline.points.map((p) => p[0]);
+      const ys = outline.points.map((p) => p[1]);
+      const pad = 12;
+      const minX = Math.min(...xs) - pad;
+      const minY = Math.min(...ys) - pad;
+      const w = Math.max(...xs) - Math.min(...xs) + pad * 2;
+      const h = Math.max(...ys) - Math.min(...ys) + pad * 2;
+      const pts = outline.points.map(([x, y]) => `${x},${y}`).join(" ");
+      return `<div class="building-outline-panel">
+        <div class="building-outline-label">${outline.label}</div>
+        <svg viewBox="${minX} ${minY} ${w} ${h}" class="building-outline-svg">
+          <polygon points="${pts}" class="building-outline-shape" />
+        </svg>
+      </div>`;
+    };
+    return `<div class="overlay" data-overlay="buildingOutline">
+      <div class="sheet sheet--tall">
+        <div class="sheet-header">
+          <h2>🏛 建物外形（下書き・Phase 1）</h2>
+          <button class="close-btn" data-close="buildingOutline">✕</button>
+        </div>
+        <p class="building-outline-note">
+          ユーザー提供の間取り図をベクター化したデータから、壁線の輪郭をそのまま抽出した
+          本庁舎・別館の外形です。まだ壁・部屋・ドア・窓・家具は含まれていません（design doc
+          §22 Phase 1）。実際の図面とずれている箇所があれば教えてください。
+        </p>
+        <div class="building-outline-grid">
+          ${BUILDING_OUTLINES.map(panel).join("")}
+        </div>
+      </div>
+    </div>`;
+  }
+
   private renderTest(): string {
     if (!this.ui.showTest) return "";
     const results = this.ui.testResults;
@@ -1543,6 +1586,7 @@ export class App {
             <div class="mission-desc">${mission.description}</div>
           </button>
           <button class="book-btn" data-book="1" title="説明ブック">📖</button>
+          <button class="book-btn" data-building-outline="1" title="建物外形（下書き）">🏛</button>
           <button class="helpdesk-btn" data-helpdesk="1" title="ヘルプデスク">
             🎫${openTicketCount(s) > 0 ? `<span class="badge">${openTicketCount(s)}</span>` : ""}
           </button>
@@ -1583,6 +1627,7 @@ export class App {
         ${this.renderJobLetter()}
         ${this.renderHelpdesk()}
         ${this.renderBook()}
+        ${this.renderBuildingOutline()}
         ${this.renderTest()}
         ${this.renderClear()}
       </div>
@@ -1615,6 +1660,10 @@ export class App {
       this.ui.showBook = true;
       this.render();
     });
+    this.root.querySelector('[data-building-outline="1"]')?.addEventListener("click", () => {
+      this.ui.showBuildingOutline = true;
+      this.render();
+    });
     this.root.querySelector('[data-helpdesk="1"]')?.addEventListener("click", () => this.handleOpenHelpdesk());
 
     this.root.querySelectorAll<HTMLElement>("[data-mode]").forEach((btn) => {
@@ -1637,6 +1686,7 @@ export class App {
       if (which === "info") this.ui.showInfo = false;
       if (which === "compareSelect") this.ui.showCompareSelect = false;
       if (which === "compare") this.ui.showCompare = false;
+      if (which === "buildingOutline") this.ui.showBuildingOutline = false;
     };
 
     this.root.querySelectorAll<HTMLElement>("[data-close]").forEach((btn) => {
