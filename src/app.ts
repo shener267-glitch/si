@@ -1462,14 +1462,35 @@ export class App {
     const panel = (outline: (typeof BUILDING_OUTLINES)[number]) => {
       const pad = 12;
       const { width, height } = outline.viewBox;
+      const gid = outline.id;
       return `<div class="building-outline-panel">
         <div class="building-outline-label">${outline.label}</div>
         <svg viewBox="${-pad} ${-pad} ${width + pad * 2} ${height + pad * 2}" class="building-outline-svg">
-          <path d="${outline.outlinePath}" class="building-outline-shape" />
+          <defs>
+            <linearGradient id="floor-${gid}" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#3a3226" />
+              <stop offset="55%" stop-color="#2c2620" />
+              <stop offset="100%" stop-color="#221d18" />
+            </linearGradient>
+            <radialGradient id="light-${gid}" cx="20%" cy="10%" r="90%">
+              <stop offset="0%" stop-color="#ffffff" stop-opacity="0.16" />
+              <stop offset="45%" stop-color="#ffffff" stop-opacity="0.05" />
+              <stop offset="100%" stop-color="#000000" stop-opacity="0.22" />
+            </radialGradient>
+            <clipPath id="clip-${gid}">
+              <path d="${outline.outlinePath}" />
+            </clipPath>
+          </defs>
+          <path d="${outline.outlinePath}" fill="url(#floor-${gid})" class="building-outline-shape" />
+          <g clip-path="url(#clip-${gid})">
+            <path d="${outline.wallsPath}" class="building-outline-wall-shadow" />
+          </g>
           <path d="${outline.wallsPath}" class="building-outline-walls" />
+          <path d="${outline.pillarsPath}" class="building-outline-pillar-shadow" />
           <path d="${outline.pillarsPath}" class="building-outline-pillars" />
           ${outline.doors.map(door).join("")}
           ${outline.stairs.map(stair).join("")}
+          <rect x="${-pad}" y="${-pad}" width="${width + pad * 2}" height="${height + pad * 2}" fill="url(#light-${gid})" class="building-outline-light" />
         </svg>
       </div>`;
     };

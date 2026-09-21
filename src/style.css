@@ -1482,7 +1482,7 @@ body {
 }
 
 .building-outline-panel {
-  background: var(--panel-2);
+  background: #17140f;
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px;
@@ -1498,51 +1498,85 @@ body {
 .building-outline-svg {
   width: 100%;
   height: auto;
-  max-height: 260px;
+  max-height: 340px;
+  border-radius: 6px;
 }
 
+/* Door Kickers 風の「上から見た室内」トーン - 床は暖色系グラデーション
+   （defs内のlinearGradient）で塗り、輪郭線自体は薄く落として床の端の
+   縁取り程度に留める。 */
 .building-outline-shape {
-  fill: var(--panel);
-  stroke: var(--accent);
-  stroke-width: 3;
+  stroke: #6b5c3f;
+  stroke-width: 2;
   stroke-linejoin: round;
 }
 
-/* Phase 2 walls - stroke only (no fill): a filled evenodd render turns the one
-   color-filled room in the source drawing (議会事務局) into a solid black blob, since
-   its subpath wasn't traced as a hollow double line like every other wall. Stroking
-   instead sidesteps that entirely and still reads as a wall with real thickness. */
+/* Phase 2 walls - 二重線の壁を「厚みのある壁」に見せるため、ストロークを
+   太くしライトグレーの明るい色にして、下のwall-shadowレイヤーと組み合わせて
+   立体的な壁に見せている。 */
 .building-outline-walls {
   fill: none;
-  stroke: var(--text-dim);
-  stroke-width: 1.4;
+  stroke: #cbd0d6;
+  stroke-width: 2.6;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.6));
 }
 
-/* Phase 1.5 fix - column (柱) symbols: like the walls, the source draws these as a
-   thin double-line band (not a solid block), so a fill just traces that thin band
-   and looks like a hairline. Stroke-only matches the source and reads correctly. */
+/* 壁の下に敷く、右下にオフセットしたぼかし影のコピー。建物の外形でクリップして
+   床の外にはみ出さないようにしている（design doc の壁データ自体は変えていない）。 */
+.building-outline-wall-shadow {
+  fill: none;
+  stroke: #000000;
+  stroke-width: 5;
+  stroke-linejoin: round;
+  opacity: 0.35;
+  transform: translate(3px, 4px);
+  filter: blur(2.5px);
+}
+
 .building-outline-pillars {
   fill: none;
-  stroke: var(--text-dim);
-  stroke-width: 1.4;
+  stroke: #cbd0d6;
+  stroke-width: 2.6;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.6));
+}
+
+.building-outline-pillar-shadow {
+  fill: none;
+  stroke: #000000;
+  stroke-width: 5;
+  opacity: 0.35;
+  transform: translate(3px, 4px);
+  filter: blur(2.5px);
 }
 
 /* Phase 3 - doors: a short line across the wall opening, in a distinct color from the
    plain wall/pillar linework so it reads as an opening rather than more wall. */
 .building-outline-door {
-  stroke: #ff5c7a;
-  stroke-width: 3;
+  stroke: #ff6b6b;
+  stroke-width: 3.4;
   stroke-linecap: round;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
 }
 
 /* Phase 3 - stairs: a small arrow along the walk-up direction the user marked. */
 .building-outline-stair line {
-  stroke: #ffb84d;
-  stroke-width: 3;
+  stroke: #ffc266;
+  stroke-width: 3.4;
   stroke-linecap: round;
 }
 .building-outline-stair path {
-  fill: #ffb84d;
+  fill: #ffc266;
+}
+.building-outline-stair {
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+}
+
+/* 建物全体にかかる、左上からの柔らかい光のグラデーション。mix-blend-modeで
+   下の床・壁と自然に合成し、上から照らされている雰囲気を出している。 */
+.building-outline-light {
+  mix-blend-mode: overlay;
+  pointer-events: none;
 }
 
 /* toast */
