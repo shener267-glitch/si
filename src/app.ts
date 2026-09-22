@@ -130,74 +130,58 @@ function shadeHex(hex: string, amount: number): string {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
 }
 
-/** V7床材・床面表現（実装指示 §5）: 材質ごとのSVG `<pattern>`定義。単色塗りに
- * せず、指示書の例（タイル=目地、タイルカーペット=繊維感+正方形の目地、
- * 長尺シート=控えめな連続模様、木目=控えめな木目、コンクリート=微細なノイズ、
- * OAフロア=パネル目地）に沿って、部屋ごとの`color`から質感を機械的に生成する。
- * 過剰なテクスチャ・写真素材は使わず、すべてCSS/SVGパターンのみで表現している。 */
+/** V7床材・床面表現 修正指示: 「床は建物全体の雰囲気を補助する背景」であり
+ * 主役にしないという方針に沿って作り直したパターン群。以前の版は目地が細かすぎる・
+ * 木目が写真のようで強すぎる・部屋ごとの色差が大きすぎるという指摘を受けたため、
+ * (1)区画を実寸で数十cm相当の大きさまで広げ、(2)目地線・木目線の不透明度を
+ * 0.5〜0.7あったものを0.1〜0.2程度まで大幅に下げ、(3)ハイライト/陰影を作る
+ * shadeHexの振れ幅も大幅に縮小し、単色塗りに近い落ち着いた見た目にしている。
+ * 床面積の大部分はほぼ均一な色に見え、模様は目を凝らしたときにだけ気づく程度。 */
 function floorPatternDef(id: string, material: FloorMaterialType, color: string): string {
-  const grout = shadeHex(color, -38);
-  const light = shadeHex(color, 22);
-  const dark = shadeHex(color, -22);
+  const grout = shadeHex(color, -12);
+  const light = shadeHex(color, 8);
+  const dark = shadeHex(color, -8);
   switch (material) {
     case "tile":
-      return `<pattern id="${id}" width="58" height="58" patternUnits="userSpaceOnUse">
-        <rect width="58" height="58" fill="${color}" />
-        <rect width="58" height="58" fill="none" stroke="${grout}" stroke-width="1.6" />
-        <polygon points="2,2 26,2 2,26" fill="${light}" opacity="0.16" />
+      return `<pattern id="${id}" width="96" height="96" patternUnits="userSpaceOnUse">
+        <rect width="96" height="96" fill="${color}" />
+        <rect width="96" height="96" fill="none" stroke="${grout}" stroke-width="1" opacity="0.35" />
       </pattern>`;
     case "carpet_tile":
-      return `<pattern id="${id}" width="22" height="22" patternUnits="userSpaceOnUse">
-        <rect width="22" height="22" fill="${color}" />
-        <rect width="22" height="22" fill="none" stroke="${grout}" stroke-width="1" opacity="0.7" />
-        <circle cx="5" cy="5" r="0.6" fill="${dark}" opacity="0.5" />
-        <circle cx="12" cy="9" r="0.6" fill="${light}" opacity="0.4" />
-        <circle cx="8" cy="16" r="0.6" fill="${dark}" opacity="0.4" />
-        <circle cx="17" cy="14" r="0.6" fill="${light}" opacity="0.35" />
+      return `<pattern id="${id}" width="88" height="88" patternUnits="userSpaceOnUse">
+        <rect width="88" height="88" fill="${color}" />
+        <rect width="88" height="88" fill="none" stroke="${grout}" stroke-width="0.8" opacity="0.25" />
       </pattern>`;
     case "carpet":
-      return `<pattern id="${id}" width="14" height="14" patternUnits="userSpaceOnUse">
-        <rect width="14" height="14" fill="${color}" />
-        <circle cx="3" cy="4" r="0.7" fill="${dark}" opacity="0.35" />
-        <circle cx="10" cy="2" r="0.7" fill="${light}" opacity="0.3" />
-        <circle cx="7" cy="9" r="0.7" fill="${dark}" opacity="0.3" />
-        <circle cx="12" cy="11" r="0.7" fill="${light}" opacity="0.25" />
-        <circle cx="2" cy="12" r="0.7" fill="${dark}" opacity="0.3" />
+      return `<pattern id="${id}" width="40" height="40" patternUnits="userSpaceOnUse">
+        <rect width="40" height="40" fill="${color}" />
+        <circle cx="10" cy="12" r="1" fill="${dark}" opacity="0.1" />
+        <circle cx="28" cy="26" r="1" fill="${dark}" opacity="0.1" />
       </pattern>`;
     case "vinyl":
-      return `<pattern id="${id}" width="220" height="90" patternUnits="userSpaceOnUse">
-        <rect width="220" height="90" fill="${color}" />
-        <line x1="0" y1="45" x2="220" y2="45" stroke="${dark}" stroke-width="0.8" opacity="0.25" />
-        <line x1="0" y1="4" x2="220" y2="4" stroke="${light}" stroke-width="3" opacity="0.12" />
+      return `<pattern id="${id}" width="240" height="120" patternUnits="userSpaceOnUse">
+        <rect width="240" height="120" fill="${color}" />
+        <line x1="0" y1="60" x2="240" y2="60" stroke="${dark}" stroke-width="0.7" opacity="0.14" />
       </pattern>`;
     case "wood":
-      return `<pattern id="${id}" width="120" height="42" patternUnits="userSpaceOnUse" patternTransform="rotate(2)">
-        <rect width="120" height="42" fill="${color}" />
-        <rect x="0" y="0" width="118" height="19" fill="${light}" opacity="0.25" />
-        <rect x="60" y="21" width="118" height="19" fill="${dark}" opacity="0.2" />
-        <g stroke="${dark}" stroke-width="1" opacity="0.5">
-          <line x1="0" y1="0" x2="120" y2="0" />
-          <line x1="0" y1="21" x2="120" y2="21" />
-          <line x1="60" y1="21" x2="60" y2="42" />
-          <line x1="0" y1="0" x2="0" y2="21" />
+      return `<pattern id="${id}" width="140" height="34" patternUnits="userSpaceOnUse" patternTransform="rotate(1)">
+        <rect width="140" height="34" fill="${color}" />
+        <rect x="0" y="0" width="138" height="17" fill="${light}" opacity="0.1" />
+        <g stroke="${dark}" stroke-width="0.6" opacity="0.18">
+          <line x1="0" y1="0" x2="140" y2="0" />
+          <line x1="0" y1="17" x2="140" y2="17" />
         </g>
       </pattern>`;
     case "concrete":
-      return `<pattern id="${id}" width="46" height="46" patternUnits="userSpaceOnUse">
-        <rect width="46" height="46" fill="${color}" />
-        <circle cx="8" cy="10" r="5" fill="${dark}" opacity="0.08" />
-        <circle cx="30" cy="6" r="7" fill="${light}" opacity="0.07" />
-        <circle cx="22" cy="30" r="8" fill="${dark}" opacity="0.07" />
-        <circle cx="40" cy="36" r="5" fill="${light}" opacity="0.08" />
+      return `<pattern id="${id}" width="70" height="70" patternUnits="userSpaceOnUse">
+        <rect width="70" height="70" fill="${color}" />
+        <circle cx="18" cy="20" r="9" fill="${dark}" opacity="0.04" />
+        <circle cx="48" cy="46" r="11" fill="${light}" opacity="0.04" />
       </pattern>`;
     case "oa_floor":
-      return `<pattern id="${id}" width="48" height="48" patternUnits="userSpaceOnUse">
-        <rect width="48" height="48" fill="${color}" />
-        <rect width="48" height="48" fill="none" stroke="${grout}" stroke-width="1.4" />
-        <circle cx="6" cy="6" r="1" fill="${dark}" opacity="0.4" />
-        <circle cx="42" cy="6" r="1" fill="${dark}" opacity="0.4" />
-        <circle cx="6" cy="42" r="1" fill="${dark}" opacity="0.4" />
-        <circle cx="42" cy="42" r="1" fill="${dark}" opacity="0.4" />
+      return `<pattern id="${id}" width="88" height="88" patternUnits="userSpaceOnUse">
+        <rect width="88" height="88" fill="${color}" />
+        <rect width="88" height="88" fill="none" stroke="${grout}" stroke-width="1" opacity="0.3" />
       </pattern>`;
   }
 }
@@ -1558,23 +1542,15 @@ export class App {
         <svg viewBox="${-pad} ${-pad} ${width + pad * 2} ${height + pad * 2}" class="building-outline-svg">
           <defs>
             <pattern id="wood-${gid}" width="132" height="48" patternUnits="userSpaceOnUse" patternTransform="rotate(3)">
-              <rect width="132" height="48" fill="#352c1f" />
-              <rect x="0" y="0" width="130" height="22" fill="#3d3222" />
-              <rect x="66" y="24" width="130" height="22" fill="#39301f" />
-              <rect x="-66" y="24" width="130" height="22" fill="#3b3221" />
-              <g stroke="#1c160e" stroke-width="1" opacity="0.7">
+              <rect width="132" height="48" fill="#7c7468" />
+              <rect x="0" y="0" width="130" height="22" fill="#807870" />
+              <rect x="66" y="24" width="130" height="22" fill="#786f61" />
+              <rect x="-66" y="24" width="130" height="22" fill="#7a7264" />
+              <g stroke="#5c5346" stroke-width="0.6" opacity="0.2">
                 <line x1="0" y1="0" x2="132" y2="0" />
                 <line x1="0" y1="24" x2="132" y2="24" />
                 <line x1="66" y1="24" x2="66" y2="48" />
                 <line x1="0" y1="0" x2="0" y2="24" />
-              </g>
-              <g stroke="#5a4a30" stroke-width="0.6" opacity="0.35">
-                <line x1="8" y1="3" x2="120" y2="5" />
-                <line x1="14" y1="12" x2="118" y2="10" />
-                <line x1="10" y1="18" x2="122" y2="19" />
-                <line x1="74" y1="27" x2="186" y2="29" />
-                <line x1="80" y1="36" x2="184" y2="34" />
-                <line x1="76" y1="42" x2="188" y2="43" />
               </g>
             </pattern>
             <filter id="grain-${gid}" x="-20%" y="-20%" width="140%" height="140%">
@@ -1582,7 +1558,7 @@ export class App {
               <feColorMatrix
                 in="n"
                 type="matrix"
-                values="0 0 0 0 0.12  0 0 0 0 0.08  0 0 0 0 0.04  0 0 0 0.55 0"
+                values="0 0 0 0 0.12  0 0 0 0 0.08  0 0 0 0 0.04  0 0 0 0.12 0"
               />
             </filter>
             <clipPath id="clip-${gid}">
