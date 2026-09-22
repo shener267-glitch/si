@@ -1511,9 +1511,10 @@ body {
   stroke-linejoin: round;
 }
 
-/* 「断面」風の壁: ユーザー提供の塗りつぶし済みデータ（`wallsPath`）をそのまま
-   単色で`fill`するだけ。判定やヒューリスティックを一切挟まないので、線と線の
-   間の隙間ぴったりの壁になり、他の場所を巻き込むこともはみ出すこともない。 */
+/* ユーザーが「壁の場所だけ」を黒く塗った参照画像の黒画素をそのまま矩形化した
+   `wallsPath`（柱の記号も同じ黒画素として含む）を単色で`fill`するだけ。ベクター
+   データの分類・ヒューリスティックを一切挟まないので、参照画像の黒とIoU=1.0で
+   一致する（他の場所を巻き込むこともはみ出すこともない）。 */
 .building-outline-wall-solid {
   fill: #8f7f61;
   stroke: none;
@@ -1532,50 +1533,6 @@ body {
 .building-outline-wall-shadow {
   fill: #000000;
   stroke: none;
-  opacity: 0.55;
-  transform: translate(3.5px, 5px);
-  filter: blur(2px);
-}
-
-/* 外壁の厚み: 元データでは外壁の輪郭（outlinePath）だけが太さのない1本線の
-   ままなので、内壁（wallsPath）と揃った太さに見えるよう、太いストロークを
-   建物の外形でクリップして「内側半分だけ」を見せている（外形の外側にはみ出す
-   半分は建物のシルエット自体でクリップされて消える）。stroke-width は内壁と
-   同じ実効太さ（約9）の2倍にしてあるのはこのため。 */
-.building-outline-extwall-shadow {
-  fill: none;
-  stroke: #000000;
-  stroke-width: 18;
-  stroke-linejoin: round;
-  opacity: 0.55;
-  transform: translate(3.5px, 5px);
-  filter: blur(2px);
-}
-.building-outline-extwall-solid {
-  fill: none;
-  stroke: #8f7f61;
-  stroke-width: 18;
-  stroke-linejoin: round;
-}
-
-/* 柱は壁と違って全断面が二重線の帯として判定できているので、保険のストロークは
-   不要で`pillarsPath`をそのまま`fill`すれば線の間にぴったり収まる。 */
-.building-outline-pillar-solid {
-  fill: #8f7f61;
-  stroke: none;
-}
-
-.building-outline-pillars {
-  fill: none;
-  stroke: #14100b;
-  stroke-width: 1.4;
-  opacity: 0.85;
-}
-
-.building-outline-pillar-shadow {
-  fill: none;
-  stroke: #000000;
-  stroke-width: 13;
   opacity: 0.55;
   transform: translate(3.5px, 5px);
   filter: blur(2px);

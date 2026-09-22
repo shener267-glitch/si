@@ -1509,18 +1509,13 @@ export class App {
               filter="url(#grain-${gid})"
               class="building-outline-grain"
             />
-            <path d="${outline.outlinePath}" class="building-outline-extwall-shadow" />
             <path d="${outline.wallsPath}" class="building-outline-wall-shadow" />
-            <path d="${outline.outlinePath}" class="building-outline-extwall-solid" />
           </g>
           <path d="${outline.wallsPath}" class="building-outline-wall-solid" />
           <path d="${outline.stairLandingPath}" class="building-outline-stair-landing" />
           <path d="${outline.stairTreadPath}" class="building-outline-stair-tread" />
           <path d="${outline.stairLowWallPath}" class="building-outline-stair-lowwall" />
           <path d="${outline.wallsPath}" class="building-outline-walls" />
-          <path d="${outline.pillarsPath}" class="building-outline-pillar-shadow" />
-          <path d="${outline.pillarsPath}" class="building-outline-pillar-solid" />
-          <path d="${outline.pillarsPath}" class="building-outline-pillars" />
           ${outline.doors.map(door).join("")}
           ${outline.stairs.map(stair).join("")}
         </svg>
