@@ -1500,6 +1500,11 @@ export class App {
               <stop offset="45%" stop-color="#ffffff" stop-opacity="0.05" />
               <stop offset="100%" stop-color="#000000" stop-opacity="0.22" />
             </radialGradient>
+            <linearGradient id="wallgrad-${gid}" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#eae5da" />
+              <stop offset="45%" stop-color="#b7ac9c" />
+              <stop offset="100%" stop-color="#544c40" />
+            </linearGradient>
             <clipPath id="clip-${gid}">
               <path d="${outline.outlinePath}" />
             </clipPath>
@@ -1516,8 +1521,10 @@ export class App {
             />
             <path d="${outline.wallsPath}" class="building-outline-wall-shadow" />
           </g>
+          <path d="${outline.wallsPath}" stroke="url(#wallgrad-${gid})" class="building-outline-wall-fill" />
           <path d="${outline.wallsPath}" class="building-outline-walls" />
           <path d="${outline.pillarsPath}" class="building-outline-pillar-shadow" />
+          <path d="${outline.pillarsPath}" stroke="url(#wallgrad-${gid})" class="building-outline-pillar-fill" />
           <path d="${outline.pillarsPath}" class="building-outline-pillars" />
           ${outline.doors.map(door).join("")}
           ${outline.stairs.map(stair).join("")}

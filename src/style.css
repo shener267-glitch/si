@@ -1511,15 +1511,24 @@ body {
   stroke-linejoin: round;
 }
 
-/* Phase 2 walls - 二重線の壁を「厚みのある壁」に見せるため、ストロークを
-   太くしライトグレーの明るい色にして、下のwall-shadowレイヤーと組み合わせて
-   立体的な壁に見せている。 */
+/* 「断面」風の壁: 壁データ自体は間取り図由来の二重線（薄い隙間のある2本線）
+   のままだが、その隙間ごと橋渡しするくらい太いストロークをまず敷いて
+   （wall-fill、左上が明るく右下が暗い斜めグラデーション）、壁を厚みのある
+   1枚の塊に見せている。その上に元の細い二重線をそのまま重ねて、コンク
+   リートを断面で見たときの継ぎ目のような表現にしている。 */
+.building-outline-wall-fill {
+  fill: none;
+  stroke-width: 9;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
 .building-outline-walls {
   fill: none;
-  stroke: #cbd0d6;
-  stroke-width: 2.6;
+  stroke: #1c1712;
+  stroke-width: 1;
   stroke-linejoin: round;
-  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.6));
+  opacity: 0.55;
 }
 
 /* 壁の下に敷く、右下にオフセットしたぼかし影のコピー。建物の外形でクリップして
@@ -1527,25 +1536,30 @@ body {
 .building-outline-wall-shadow {
   fill: none;
   stroke: #000000;
-  stroke-width: 5;
+  stroke-width: 11;
   stroke-linejoin: round;
-  opacity: 0.35;
+  opacity: 0.4;
   transform: translate(3px, 4px);
   filter: blur(2.5px);
 }
 
+.building-outline-pillar-fill {
+  fill: none;
+  stroke-width: 9;
+}
+
 .building-outline-pillars {
   fill: none;
-  stroke: #cbd0d6;
-  stroke-width: 2.6;
-  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.6));
+  stroke: #1c1712;
+  stroke-width: 1;
+  opacity: 0.55;
 }
 
 .building-outline-pillar-shadow {
   fill: none;
   stroke: #000000;
-  stroke-width: 5;
-  opacity: 0.35;
+  stroke-width: 11;
+  opacity: 0.4;
   transform: translate(3px, 4px);
   filter: blur(2.5px);
 }
