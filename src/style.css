@@ -1511,25 +1511,12 @@ body {
   stroke-linejoin: round;
 }
 
-/* 「断面」風の壁: `wallsFillPath`（二重線の帯だとdata側で確認済みの部分だけを
-   集めたパス）を単色で`fill`する層が本体。線と線の間の隙間ぴったりに収まり、
-   線の外側へのはみ出しが起きない。 */
+/* 「断面」風の壁: ユーザー提供の塗りつぶし済みデータ（`wallsPath`）をそのまま
+   単色で`fill`するだけ。判定やヒューリスティックを一切挟まないので、線と線の
+   間の隙間ぴったりの壁になり、他の場所を巻き込むこともはみ出すこともない。 */
 .building-outline-wall-solid {
   fill: #8f7f61;
   stroke: none;
-}
-
-/* `wallsFillPath`にも階段のハッチングにも該当しなかった部分パス（1本の線で
-   塗りつぶされた部屋の輪郭など）向けの保険。`fill`すると部屋の内部まで塗り
-   つぶされてしまうため、線を中心に太さを乗せる`stroke`で厚みを表現している。
-   このpathには元々wallsFillPathやハッチング部分が含まれないので、他の壁との
-   二重描画やはみ出しの重なりは起きない。 */
-.building-outline-wall-blob {
-  fill: none;
-  stroke: #8f7f61;
-  stroke-width: 11;
-  stroke-linejoin: round;
-  stroke-linecap: round;
 }
 
 .building-outline-walls {
@@ -1543,13 +1530,32 @@ body {
 /* 壁の下に敷く、右下にオフセットしたぼかし影のコピー。建物の外形でクリップして
    床の外にはみ出さないようにしている（design doc の壁データ自体は変えていない）。 */
 .building-outline-wall-shadow {
+  fill: #000000;
+  stroke: none;
+  opacity: 0.55;
+  transform: translate(3.5px, 5px);
+  filter: blur(2px);
+}
+
+/* 外壁の厚み: 元データでは外壁の輪郭（outlinePath）だけが太さのない1本線の
+   ままなので、内壁（wallsPath）と揃った太さに見えるよう、太いストロークを
+   建物の外形でクリップして「内側半分だけ」を見せている（外形の外側にはみ出す
+   半分は建物のシルエット自体でクリップされて消える）。stroke-width は内壁と
+   同じ実効太さ（約9）の2倍にしてあるのはこのため。 */
+.building-outline-extwall-shadow {
   fill: none;
   stroke: #000000;
-  stroke-width: 13;
+  stroke-width: 18;
   stroke-linejoin: round;
   opacity: 0.55;
   transform: translate(3.5px, 5px);
   filter: blur(2px);
+}
+.building-outline-extwall-solid {
+  fill: none;
+  stroke: #8f7f61;
+  stroke-width: 18;
+  stroke-linejoin: round;
 }
 
 /* 柱は壁と違って全断面が二重線の帯として判定できているので、保険のストロークは
