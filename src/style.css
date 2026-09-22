@@ -1573,6 +1573,14 @@ body {
   pointer-events: none;
 }
 
+/* V7床材・床面表現: 部屋ごとの床材ゾーン（building.tsのFloorZone参照）。
+   fillは各ゾーンごとに生成したパターン（app.tsのfloorPatternDef）を参照している。
+   木目のgrain(上記)がこの上からmultiplyで重なるため、床材ゾーンにもうっすら
+   経年感が乗る（本庁舎の「少し古いが維持管理された」トーンに合わせている）。 */
+.building-outline-floor-zone {
+  stroke: none;
+}
+
 /* toast */
 .toast {
   position: absolute;

@@ -1,5 +1,5 @@
 import { BOOK_CATEGORIES, findBookPage } from "./book";
-import { BUILDING_OUTLINES, type DoorMarker, type StairArrow } from "./building";
+import { BUILDING_OUTLINES, type DoorMarker, type StairArrow, type FloorMaterialType } from "./building";
 import { cableLengthMeters, isCableTooLong } from "./cables";
 import {
   CATEGORY_LABELS,
@@ -117,6 +117,90 @@ function initialUi(): UiState {
 
 const money = (v: number) => "¥" + v.toLocaleString("ja-JP");
 const STEP_ICON: Record<string, string> = { ok: "✅", fail: "❌", skipped: "➖" };
+
+/** V7床材・床面表現: 16進カラーを明るく/暗くする。目地線やハイライト・陰影を
+ * 部屋ごとの`color`から自動生成するための小さなヘルパー（新しい色を毎回
+ * 手で指定しなくて済むようにしている）。 */
+function shadeHex(hex: string, amount: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const clamp = (v: number) => Math.max(0, Math.min(255, v));
+  const r = clamp(((n >> 16) & 0xff) + amount);
+  const g = clamp(((n >> 8) & 0xff) + amount);
+  const b = clamp((n & 0xff) + amount);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+}
+
+/** V7床材・床面表現（実装指示 §5）: 材質ごとのSVG `<pattern>`定義。単色塗りに
+ * せず、指示書の例（タイル=目地、タイルカーペット=繊維感+正方形の目地、
+ * 長尺シート=控えめな連続模様、木目=控えめな木目、コンクリート=微細なノイズ、
+ * OAフロア=パネル目地）に沿って、部屋ごとの`color`から質感を機械的に生成する。
+ * 過剰なテクスチャ・写真素材は使わず、すべてCSS/SVGパターンのみで表現している。 */
+function floorPatternDef(id: string, material: FloorMaterialType, color: string): string {
+  const grout = shadeHex(color, -38);
+  const light = shadeHex(color, 22);
+  const dark = shadeHex(color, -22);
+  switch (material) {
+    case "tile":
+      return `<pattern id="${id}" width="58" height="58" patternUnits="userSpaceOnUse">
+        <rect width="58" height="58" fill="${color}" />
+        <rect width="58" height="58" fill="none" stroke="${grout}" stroke-width="1.6" />
+        <polygon points="2,2 26,2 2,26" fill="${light}" opacity="0.16" />
+      </pattern>`;
+    case "carpet_tile":
+      return `<pattern id="${id}" width="22" height="22" patternUnits="userSpaceOnUse">
+        <rect width="22" height="22" fill="${color}" />
+        <rect width="22" height="22" fill="none" stroke="${grout}" stroke-width="1" opacity="0.7" />
+        <circle cx="5" cy="5" r="0.6" fill="${dark}" opacity="0.5" />
+        <circle cx="12" cy="9" r="0.6" fill="${light}" opacity="0.4" />
+        <circle cx="8" cy="16" r="0.6" fill="${dark}" opacity="0.4" />
+        <circle cx="17" cy="14" r="0.6" fill="${light}" opacity="0.35" />
+      </pattern>`;
+    case "carpet":
+      return `<pattern id="${id}" width="14" height="14" patternUnits="userSpaceOnUse">
+        <rect width="14" height="14" fill="${color}" />
+        <circle cx="3" cy="4" r="0.7" fill="${dark}" opacity="0.35" />
+        <circle cx="10" cy="2" r="0.7" fill="${light}" opacity="0.3" />
+        <circle cx="7" cy="9" r="0.7" fill="${dark}" opacity="0.3" />
+        <circle cx="12" cy="11" r="0.7" fill="${light}" opacity="0.25" />
+        <circle cx="2" cy="12" r="0.7" fill="${dark}" opacity="0.3" />
+      </pattern>`;
+    case "vinyl":
+      return `<pattern id="${id}" width="220" height="90" patternUnits="userSpaceOnUse">
+        <rect width="220" height="90" fill="${color}" />
+        <line x1="0" y1="45" x2="220" y2="45" stroke="${dark}" stroke-width="0.8" opacity="0.25" />
+        <line x1="0" y1="4" x2="220" y2="4" stroke="${light}" stroke-width="3" opacity="0.12" />
+      </pattern>`;
+    case "wood":
+      return `<pattern id="${id}" width="120" height="42" patternUnits="userSpaceOnUse" patternTransform="rotate(2)">
+        <rect width="120" height="42" fill="${color}" />
+        <rect x="0" y="0" width="118" height="19" fill="${light}" opacity="0.25" />
+        <rect x="60" y="21" width="118" height="19" fill="${dark}" opacity="0.2" />
+        <g stroke="${dark}" stroke-width="1" opacity="0.5">
+          <line x1="0" y1="0" x2="120" y2="0" />
+          <line x1="0" y1="21" x2="120" y2="21" />
+          <line x1="60" y1="21" x2="60" y2="42" />
+          <line x1="0" y1="0" x2="0" y2="21" />
+        </g>
+      </pattern>`;
+    case "concrete":
+      return `<pattern id="${id}" width="46" height="46" patternUnits="userSpaceOnUse">
+        <rect width="46" height="46" fill="${color}" />
+        <circle cx="8" cy="10" r="5" fill="${dark}" opacity="0.08" />
+        <circle cx="30" cy="6" r="7" fill="${light}" opacity="0.07" />
+        <circle cx="22" cy="30" r="8" fill="${dark}" opacity="0.07" />
+        <circle cx="40" cy="36" r="5" fill="${light}" opacity="0.08" />
+      </pattern>`;
+    case "oa_floor":
+      return `<pattern id="${id}" width="48" height="48" patternUnits="userSpaceOnUse">
+        <rect width="48" height="48" fill="${color}" />
+        <rect width="48" height="48" fill="none" stroke="${grout}" stroke-width="1.4" />
+        <circle cx="6" cy="6" r="1" fill="${dark}" opacity="0.4" />
+        <circle cx="42" cy="6" r="1" fill="${dark}" opacity="0.4" />
+        <circle cx="6" cy="42" r="1" fill="${dark}" opacity="0.4" />
+        <circle cx="42" cy="42" r="1" fill="${dark}" opacity="0.4" />
+      </pattern>`;
+  }
+}
 
 function portSummary(state: GameState, device: Device): string | null {
   if (device.ports.length <= 1) return null;
@@ -1463,6 +1547,12 @@ export class App {
       const pad = 12;
       const { width, height } = outline.viewBox;
       const gid = outline.id;
+      const floorZoneDefs = outline.floorZones
+        .map((z, i) => floorPatternDef(`fz-${gid}-${i}`, z.material, z.color))
+        .join("");
+      const floorZonePaths = outline.floorZones
+        .map((z, i) => `<path d="${z.path}" fill="url(#fz-${gid}-${i})" class="building-outline-floor-zone" />`)
+        .join("");
       return `<div class="building-outline-panel">
         <div class="building-outline-label">${outline.label}</div>
         <svg viewBox="${-pad} ${-pad} ${width + pad * 2} ${height + pad * 2}" class="building-outline-svg">
@@ -1498,9 +1588,11 @@ export class App {
             <clipPath id="clip-${gid}">
               <path d="${outline.outlinePath}" />
             </clipPath>
+            ${floorZoneDefs}
           </defs>
           <path d="${outline.outlinePath}" fill="url(#wood-${gid})" class="building-outline-shape" />
           <g clip-path="url(#clip-${gid})">
+            ${floorZonePaths}
             <rect
               x="${-pad}"
               y="${-pad}"
