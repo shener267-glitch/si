@@ -1482,7 +1482,7 @@ body {
 }
 
 .building-outline-panel {
-  background: var(--panel-2);
+  background: #17140f;
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px;
@@ -1498,51 +1498,89 @@ body {
 .building-outline-svg {
   width: 100%;
   height: auto;
-  max-height: 260px;
+  max-height: 340px;
+  border-radius: 6px;
 }
 
+/* Door Kickers 風の「上から見た室内」トーン - 床は暖色系グラデーション
+   （defs内のlinearGradient）で塗り、輪郭線自体は薄く落として床の端の
+   縁取り程度に留める。 */
 .building-outline-shape {
-  fill: var(--panel);
-  stroke: var(--accent);
-  stroke-width: 3;
+  stroke: #6b5c3f;
+  stroke-width: 2;
   stroke-linejoin: round;
 }
 
-/* Phase 2 walls - stroke only (no fill): a filled evenodd render turns the one
-   color-filled room in the source drawing (議会事務局) into a solid black blob, since
-   its subpath wasn't traced as a hollow double line like every other wall. Stroking
-   instead sidesteps that entirely and still reads as a wall with real thickness. */
-.building-outline-walls {
-  fill: none;
-  stroke: var(--text-dim);
-  stroke-width: 1.4;
+/* ユーザーが「壁の場所だけ」を黒く塗った参照画像の黒画素をそのまま矩形化した
+   `wallsPath`（柱の記号も同じ黒画素として含む）を単色で`fill`するだけ。ベクター
+   データの分類・ヒューリスティックを一切挟まないので、参照画像の黒とIoU=1.0で
+   一致する（他の場所を巻き込むこともはみ出すこともない）。 */
+.building-outline-wall-solid {
+  fill: #8f7f61;
+  stroke: none;
 }
 
-/* Phase 1.5 fix - column (柱) symbols: like the walls, the source draws these as a
-   thin double-line band (not a solid block), so a fill just traces that thin band
-   and looks like a hairline. Stroke-only matches the source and reads correctly. */
-.building-outline-pillars {
+.building-outline-walls {
   fill: none;
-  stroke: var(--text-dim);
+  stroke: #14100b;
   stroke-width: 1.4;
+  stroke-linejoin: round;
+  opacity: 0.85;
+}
+
+/* 壁の下に敷く、右下にオフセットしたぼかし影のコピー。建物の外形でクリップして
+   床の外にはみ出さないようにしている（design doc の壁データ自体は変えていない）。 */
+.building-outline-wall-shadow {
+  fill: #000000;
+  stroke: none;
+  opacity: 0.55;
+  transform: translate(3.5px, 5px);
+  filter: blur(2px);
+}
+
+/* 階段記号の色分け（黒塗り=壁・赤=踊り場・緑=階段・オレンジ=階段の段に合わせた
+   低い壁というユーザー提供の凡例通りに、そのままの色で塗っている）。 */
+.building-outline-stair-landing {
+  fill: #ff0000;
+  stroke: none;
+}
+.building-outline-stair-tread {
+  fill: #55ff00;
+  stroke: none;
+}
+.building-outline-stair-lowwall {
+  fill: #ffaa00;
+  stroke: none;
 }
 
 /* Phase 3 - doors: a short line across the wall opening, in a distinct color from the
    plain wall/pillar linework so it reads as an opening rather than more wall. */
 .building-outline-door {
-  stroke: #ff5c7a;
-  stroke-width: 3;
+  stroke: #ff6b6b;
+  stroke-width: 3.4;
   stroke-linecap: round;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
 }
 
 /* Phase 3 - stairs: a small arrow along the walk-up direction the user marked. */
 .building-outline-stair line {
-  stroke: #ffb84d;
-  stroke-width: 3;
+  stroke: #ffc266;
+  stroke-width: 3.4;
   stroke-linecap: round;
 }
 .building-outline-stair path {
-  fill: #ffb84d;
+  fill: #ffc266;
+}
+.building-outline-stair {
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+}
+
+/* 床材をリアルにする第一歩: feTurbulenceで作った木目のノイズを、板張り
+   パターン（defs内のpattern）の上にmultiplyで重ねて、単なる塗りつぶしでは
+   出ない木の質感を足している。 */
+.building-outline-grain {
+  mix-blend-mode: multiply;
+  pointer-events: none;
 }
 
 /* toast */
