@@ -1511,16 +1511,24 @@ body {
   stroke-linejoin: round;
 }
 
-/* 「断面」風の壁: 壁データ自体は間取り図由来の二重線（薄い隙間のある2本線）
-   のままだが、その隙間ごと橋渡しするくらい太いストロークをまず敷いて
-   （wall-fill、左上が明るく右下が暗い斜めグラデーション）、壁を厚みのある
-   1枚の塊に見せている。その上に元の細い二重線をそのまま重ねて、コンク
-   リートを断面で見たときの継ぎ目のような表現にしている。 */
+/* 「断面」風の壁: 単色（グラデーションなし）で塗った壁本体を2段構えで表現している。
+   1段目のwall-fillは、二重線をまだ帯として綺麗に判定できていない一部の壁向けの
+   保険として、隙間を橋渡しする太いストロークを敷く（判定漏れの壁だけがこの層で
+   見えるので、線の外側へのはみ出しはほぼ目立たない）。2段目のwall-solidが本命で、
+   `wallsFillPath`（二重線の帯だとdata側で確認済みの部分だけを集めたパス）を
+   そのまま`fill`で塗るので、線と線の間の隙間ぴったりに収まり、線の周りに
+   はみ出すことがない。 */
 .building-outline-wall-fill {
   fill: none;
+  stroke: #a89a83;
   stroke-width: 9;
   stroke-linejoin: round;
   stroke-linecap: round;
+}
+
+.building-outline-wall-solid {
+  fill: #a89a83;
+  stroke: none;
 }
 
 .building-outline-walls {
@@ -1543,9 +1551,11 @@ body {
   filter: blur(2.5px);
 }
 
-.building-outline-pillar-fill {
-  fill: none;
-  stroke-width: 9;
+/* 柱は壁と違って全断面が二重線の帯として判定できているので、保険のストロークは
+   不要で`pillarsPath`をそのまま`fill`すれば線の間にぴったり収まる。 */
+.building-outline-pillar-solid {
+  fill: #a89a83;
+  stroke: none;
 }
 
 .building-outline-pillars {
@@ -1584,13 +1594,6 @@ body {
 }
 .building-outline-stair {
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
-}
-
-/* 建物全体にかかる、左上からの柔らかい光のグラデーション。mix-blend-modeで
-   下の床・壁と自然に合成し、上から照らされている雰囲気を出している。 */
-.building-outline-light {
-  mix-blend-mode: overlay;
-  pointer-events: none;
 }
 
 /* 床材をリアルにする第一歩: feTurbulenceで作った木目のノイズを、板張り
