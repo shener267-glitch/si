@@ -1528,16 +1528,6 @@ body {
   opacity: 0.85;
 }
 
-/* 壁の下に敷く、右下にオフセットしたぼかし影のコピー。建物の外形でクリップして
-   床の外にはみ出さないようにしている（design doc の壁データ自体は変えていない）。 */
-.building-outline-wall-shadow {
-  fill: #000000;
-  stroke: none;
-  opacity: 0.55;
-  transform: translate(3.5px, 5px);
-  filter: blur(2px);
-}
-
 /* 階段記号の色分け（黒塗り=壁・赤=踊り場・緑=階段・オレンジ=階段の段に合わせた
    低い壁というユーザー提供の凡例通りに、そのままの色で塗っている）。 */
 .building-outline-stair-landing {
