@@ -1511,21 +1511,11 @@ body {
   stroke-linejoin: round;
 }
 
-/* 「断面」風の壁: 単色（グラデーションなし）で塗った壁本体を2段構えで表現している。
-   1段目のwall-fillは、二重線をまだ帯として綺麗に判定できていない一部の壁向けの
-   保険として、隙間を橋渡しする太いストロークを敷く（判定漏れの壁だけがこの層で
-   見えるので、線の外側へのはみ出しはほぼ目立たない）。2段目のwall-solidが本命で、
-   `wallsFillPath`（二重線の帯だとdata側で確認済みの部分だけを集めたパス）を
-   そのまま`fill`で塗るので、線と線の間の隙間ぴったりに収まり、線の周りに
-   はみ出すことがない。 */
-.building-outline-wall-fill {
-  fill: none;
-  stroke: #a89a83;
-  stroke-width: 9;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-}
-
+/* 「断面」風の壁: 太いストロークで隙間を橋渡しする方式は線の外側にまではみ出して
+   縁取りのように見えてしまったため廃止し、`wallsFillPath`（二重線の帯だとdata側で
+   確認済みの部分だけを集めたパス）をそのまま単色で`fill`する1層だけにした。線と
+   線の間の隙間ぴったりに収まり、線の外側へのはみ出しが起きない。判定から漏れた
+   部分パスは薄い輪郭線（`building-outline-walls`）のみのまま残る。 */
 .building-outline-wall-solid {
   fill: #a89a83;
   stroke: none;
