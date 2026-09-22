@@ -1575,6 +1575,21 @@ body {
   filter: blur(2px);
 }
 
+/* 階段記号の色分け（黒塗り=壁・赤=踊り場・緑=階段・オレンジ=階段の段に合わせた
+   低い壁というユーザー提供の凡例通りに、そのままの色で塗っている）。 */
+.building-outline-stair-landing {
+  fill: #ff0000;
+  stroke: none;
+}
+.building-outline-stair-tread {
+  fill: #55ff00;
+  stroke: none;
+}
+.building-outline-stair-lowwall {
+  fill: #ffaa00;
+  stroke: none;
+}
+
 /* Phase 3 - doors: a short line across the wall opening, in a distinct color from the
    plain wall/pillar linework so it reads as an opening rather than more wall. */
 .building-outline-door {
