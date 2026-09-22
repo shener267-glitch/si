@@ -1511,6 +1511,7 @@ export class App {
             />
             <path d="${outline.wallsPath}" class="building-outline-wall-shadow" />
           </g>
+          <path d="${outline.wallsBlobPath}" class="building-outline-wall-blob" />
           <path d="${outline.wallsFillPath}" class="building-outline-wall-solid" />
           <path d="${outline.wallsPath}" class="building-outline-walls" />
           <path d="${outline.pillarsPath}" class="building-outline-pillar-shadow" />

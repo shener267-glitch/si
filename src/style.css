@@ -1511,14 +1511,25 @@ body {
   stroke-linejoin: round;
 }
 
-/* 「断面」風の壁: 太いストロークで隙間を橋渡しする方式は線の外側にまではみ出して
-   縁取りのように見えてしまったため廃止し、`wallsFillPath`（二重線の帯だとdata側で
-   確認済みの部分だけを集めたパス）をそのまま単色で`fill`する1層だけにした。線と
-   線の間の隙間ぴったりに収まり、線の外側へのはみ出しが起きない。判定から漏れた
-   部分パスは薄い輪郭線（`building-outline-walls`）のみのまま残る。 */
+/* 「断面」風の壁: `wallsFillPath`（二重線の帯だとdata側で確認済みの部分だけを
+   集めたパス）を単色で`fill`する層が本体。線と線の間の隙間ぴったりに収まり、
+   線の外側へのはみ出しが起きない。 */
 .building-outline-wall-solid {
   fill: #a89a83;
   stroke: none;
+}
+
+/* `wallsFillPath`にも階段のハッチングにも該当しなかった部分パス（1本の線で
+   塗りつぶされた部屋の輪郭など）向けの保険。`fill`すると部屋の内部まで塗り
+   つぶされてしまうため、線を中心に太さを乗せる`stroke`で厚みを表現している。
+   このpathには元々wallsFillPathやハッチング部分が含まれないので、他の壁との
+   二重描画やはみ出しの重なりは起きない。 */
+.building-outline-wall-blob {
+  fill: none;
+  stroke: #a89a83;
+  stroke-width: 9;
+  stroke-linejoin: round;
+  stroke-linecap: round;
 }
 
 .building-outline-walls {
